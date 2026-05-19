@@ -1,6 +1,9 @@
-import { Link } from 'expo-router';
-import React from 'react';
+import { Link, useRouter } from 'expo-router';
+import React, { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+
+import { getIdentityFromMetadata, type SoriIdentity } from '@/lib/identity';
+import { getSupabase } from '@/lib/supabase';
 
 const setupSteps = [
   {
@@ -21,8 +24,33 @@ const setupSteps = [
 ];
 
 export default function DashboardScreen() {
+  const router = useRouter();
   const { width } = useWindowDimensions();
+  const [identity, setIdentity] = useState<SoriIdentity | null>(null);
   const compact = width < 900;
+
+  useEffect(() => {
+    async function requireHandle() {
+      const { data } = await getSupabase().auth.getUser();
+      const user = data?.user;
+
+      if (!user) {
+        router.replace('/login');
+        return;
+      }
+
+      const currentIdentity = getIdentityFromMetadata(user.user_metadata);
+
+      if (!currentIdentity.handle) {
+        router.replace('/claim-handle');
+        return;
+      }
+
+      setIdentity(currentIdentity);
+    }
+
+    requireHandle();
+  }, [router]);
 
   return (
     <ScrollView
@@ -36,8 +64,10 @@ export default function DashboardScreen() {
           <Text style={styles.kicker}>SORI DASHBOARD</Text>
           <Text style={styles.title}>Welcome to your profile studio.</Text>
           <Text style={styles.subtitle}>
-            Your account is active. Next we will turn this into the control room for your profile,
-            media, storefront grid, and theme settings.
+            {identity?.handle
+              ? `${identity.displayName} ${identity.isFounder ? 'is founder verified' : 'is live'} as @${identity.handle}.`
+              : 'Your account is active.'}{' '}
+            This is the control room for your profile, media, grid, and theme settings.
           </Text>
         </View>
 

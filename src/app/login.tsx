@@ -2,6 +2,7 @@ import { Link, useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { getIdentityFromMetadata } from '@/lib/identity';
 import { getSupabase } from '@/lib/supabase';
 
 export default function LoginScreen() {
@@ -28,11 +29,16 @@ export default function LoginScreen() {
     let loginError: Error | null = null;
 
     try {
-      const { error } = await getSupabase().auth.signInWithPassword({
+      const { data, error } = await getSupabase().auth.signInWithPassword({
         email: cleanEmail,
         password,
       });
       loginError = error;
+      if (!error) {
+        const identity = getIdentityFromMetadata(data?.user?.user_metadata);
+        router.replace(identity.handle ? '/' : '/claim-handle');
+        return;
+      }
     } catch (caughtError) {
       loginError = caughtError instanceof Error ? caughtError : new Error('Could not log in.');
     }
@@ -44,7 +50,7 @@ export default function LoginScreen() {
       return;
     }
 
-    router.replace('/');
+    router.replace('/claim-handle');
   }
 
   return (

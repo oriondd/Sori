@@ -1,3 +1,8 @@
+type SoriUser = {
+  id: string;
+  email?: string;
+  user_metadata?: Record<string, string | boolean | undefined>;
+};
 type AuthResult = Promise<{ error: Error | null }>;
 type SoriSupabaseClient = {
   auth: {
@@ -8,8 +13,10 @@ type SoriSupabaseClient = {
         emailRedirectTo?: string;
         data?: Record<string, string>;
       };
-    }) => AuthResult;
-    signInWithPassword: (args: { email: string; password: string }) => AuthResult;
+    }) => Promise<{ data?: { user?: SoriUser | null }; error: Error | null }>;
+    signInWithPassword: (args: { email: string; password: string }) => Promise<{ data?: { user?: SoriUser | null }; error: Error | null }>;
+    getUser: () => Promise<{ data?: { user?: SoriUser | null }; error: Error | null }>;
+    updateUser: (args: { data?: Record<string, string | boolean> }) => Promise<{ data?: { user?: SoriUser | null }; error: Error | null }>;
   };
 };
 

@@ -2,6 +2,9 @@ import { Link } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
+import { formatHandle, getIdentityFromMetadata, type SoriIdentity } from '@/lib/identity';
+import { getSupabase } from '@/lib/supabase';
+
 type SavedProfile = {
   themeName: string;
   html: string;
@@ -164,7 +167,18 @@ function CustomProfileFrame({
   });
 }
 
-function DefaultProfile({ compact }: { compact: boolean }) {
+function GoldFounderBadge() {
+  return (
+    <View style={styles.goldFounderBadge}>
+      <Text style={styles.goldFounderBadgeText}>✓</Text>
+    </View>
+  );
+}
+
+function DefaultProfile({ compact, identity }: { compact: boolean; identity: SoriIdentity | null }) {
+  const displayName = identity?.displayName || 'Your story starts here';
+  const handle = formatHandle(identity?.handle);
+
   return (
     <View style={[styles.defaultCanvas, compact && styles.defaultCanvasCompact]}>
       <View style={styles.glowOne} />
@@ -174,10 +188,14 @@ function DefaultProfile({ compact }: { compact: boolean }) {
           <Text style={styles.avatarText}>S</Text>
         </View>
         <View style={styles.identityBlock}>
-          <Text style={styles.handle}>@your-sori</Text>
-          <Text style={[styles.profileTitle, compact && styles.profileTitleCompact]}>
-            {compact ? 'Your story' : 'Your story starts here'}
-          </Text>
+          <Text style={styles.handle}>{handle}</Text>
+          <View style={styles.profileNameRow}>
+            <Text style={[styles.profileTitle, compact && styles.profileTitleCompact]}>
+              {compact ? displayName : displayName}
+            </Text>
+            {identity?.verifiedBadge === 'founder-gold' ? <GoldFounderBadge /> : null}
+          </View>
+          <Text style={styles.identityHandle}>{handle}</Text>
           <Text style={[styles.mood, compact && styles.moodCompact]}>
             {compact ? 'Mood: building my Sori page.' : 'Mood: building a corner of the internet that feels like me.'}
           </Text>
@@ -218,6 +236,7 @@ function DefaultProfile({ compact }: { compact: boolean }) {
 export default function MyProfileScreen() {
   const { width } = useWindowDimensions();
   const [profile, setProfile] = useState<SavedProfile>(fallbackProfile);
+  const [identity, setIdentity] = useState<SoriIdentity | null>(null);
   const [safeMode, setSafeMode] = useState(false);
   const compact = width < 760;
 
@@ -226,6 +245,16 @@ export default function MyProfileScreen() {
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
       setSafeMode(window.localStorage.getItem(SAFE_MODE_KEY) === 'true');
     }
+
+    async function loadIdentity() {
+      const { data } = await getSupabase().auth.getUser();
+      const user = data?.user;
+      if (user) {
+        setIdentity(getIdentityFromMetadata(user.user_metadata));
+      }
+    }
+
+    loadIdentity();
   }, []);
 
   const hasCustomCode = useMemo(
@@ -267,7 +296,7 @@ export default function MyProfileScreen() {
               safeMode={safeMode}
             />
           ) : (
-            <DefaultProfile compact={compact} />
+            <DefaultProfile compact={compact} identity={identity} />
           )}
         </View>
 
@@ -275,7 +304,10 @@ export default function MyProfileScreen() {
           <View style={styles.miniCard}>
             <Text style={styles.miniLabel}>THEME</Text>
             <Text style={styles.miniTitle}>{profile.themeName}</Text>
-            <Text style={styles.miniCopy}>Free account</Text>
+            <View style={styles.miniIdentityRow}>
+              <Text style={styles.miniCopy}>{formatHandle(identity?.handle)}</Text>
+              {identity?.verifiedBadge === 'founder-gold' ? <GoldFounderBadge /> : null}
+            </View>
             {hasCustomCode ? (
               <Pressable
                 style={styles.safeToggle}
@@ -476,9 +508,21 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     marginTop: 4,
   },
+  profileNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
   profileTitleCompact: {
     fontSize: 29,
     lineHeight: 32,
+  },
+  identityHandle: {
+    color: '#facc15',
+    fontSize: 14,
+    fontWeight: '900',
+    marginTop: 6,
   },
   mood: {
     color: '#dbeafe',
@@ -597,6 +641,31 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '900',
     marginTop: 6,
+  },
+  miniIdentityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 6,
+  },
+  goldFounderBadge: {
+    width: 23,
+    height: 23,
+    borderRadius: 12,
+    backgroundColor: '#facc15',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#fff7ad',
+    shadowColor: '#facc15',
+    shadowOpacity: 0.45,
+    shadowRadius: 10,
+  },
+  goldFounderBadgeText: {
+    color: '#451a03',
+    fontSize: 14,
+    fontWeight: '900',
   },
   safeToggle: {
     height: 38,
