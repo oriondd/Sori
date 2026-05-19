@@ -1,5 +1,5 @@
 import { Link } from 'expo-router';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 
 type StarterTheme = {
@@ -8,6 +8,14 @@ type StarterTheme = {
   html: string;
   css: string;
   js: string;
+};
+
+type SavedProfile = {
+  themeName?: string;
+  html?: string;
+  css?: string;
+  js?: string;
+  mode?: 'simple' | 'advanced';
 };
 
 const STORAGE_KEY = 'sori.profile.customization';
@@ -26,6 +34,8 @@ const FRAME_CSP = [
   "form-action 'none'",
   "worker-src 'none'",
 ].join('; ');
+
+const CUSTOM_THEME_NAME = 'Custom Theme';
 
 const starterThemes: StarterTheme[] = [
   {
@@ -223,6 +233,19 @@ function stripCspBreakingMeta(value: string) {
   return value.replace(/<meta[^>]+http-equiv=["']content-security-policy["'][^>]*>/gi, '');
 }
 
+function readSavedProfile(): SavedProfile | null {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') {
+    return null;
+  }
+
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
 function buildPreviewDocument(html: string, css: string, js: string) {
   const profileHtml = stripCspBreakingMeta(html);
   const cspMeta = `<meta http-equiv="Content-Security-Policy" content="${FRAME_CSP}" />`;
@@ -291,30 +314,71 @@ function PreviewFrame({ enabled, html, css, js }: { enabled: boolean; html: stri
 export default function CustomizeProfileScreen() {
   const { width } = useWindowDimensions();
   const [selectedTheme, setSelectedTheme] = useState(starterThemes[0].name);
+  const [editorMode, setEditorMode] = useState<'custom' | 'theme' | 'ai'>('theme');
   const [htmlCode, setHtmlCode] = useState(starterThemes[0].html);
   const [cssCode, setCssCode] = useState(starterThemes[0].css);
   const [jsCode, setJsCode] = useState(starterThemes[0].js);
   const [aiPrompt, setAiPrompt] = useState('');
   const [previewEnabled, setPreviewEnabled] = useState(true);
   const [saved, setSaved] = useState(false);
+  const [hasSavedCustomTheme, setHasSavedCustomTheme] = useState(false);
 
-  const selected = useMemo(
-    () => starterThemes.find((theme) => theme.name === selectedTheme) ?? starterThemes[0],
-    [selectedTheme],
-  );
   const compact = width < 760;
+  const previewThemeName = editorMode === 'custom' ? CUSTOM_THEME_NAME : selectedTheme;
+
+  useEffect(() => {
+    const savedProfile = readSavedProfile();
+
+    if (!savedProfile) {
+      return;
+    }
+
+    setSelectedTheme(CUSTOM_THEME_NAME);
+    setEditorMode('custom');
+    setHtmlCode(savedProfile.html || '');
+    setCssCode(savedProfile.css || '');
+    setJsCode(savedProfile.js || '');
+    setSaved(true);
+    setHasSavedCustomTheme(true);
+  }, []);
 
   const chooseTheme = (theme: StarterTheme) => {
     setSelectedTheme(theme.name);
+    setEditorMode('theme');
     setHtmlCode(theme.html);
     setCssCode(theme.css);
     setJsCode(theme.js);
     setSaved(false);
   };
 
+  const chooseCustomTheme = () => {
+    const savedProfile = readSavedProfile();
+    setEditorMode('custom');
+    setSelectedTheme(CUSTOM_THEME_NAME);
+
+    if (savedProfile) {
+      setHtmlCode(savedProfile.html || '');
+      setCssCode(savedProfile.css || '');
+      setJsCode(savedProfile.js || '');
+      setSaved(true);
+      setHasSavedCustomTheme(true);
+    } else {
+      setSaved(false);
+    }
+  };
+
+  const markCustomEditing = () => {
+    if (editorMode !== 'custom') {
+      setEditorMode('custom');
+      setSelectedTheme(CUSTOM_THEME_NAME);
+    }
+    setSaved(false);
+  };
+
   const generateAiCode = () => {
     const vibe = escapeHtml(aiPrompt.trim() || 'glowing personal profile with a bold intro and photo blocks');
     setSelectedTheme('AI Draft');
+    setEditorMode('ai');
     setHtmlCode(`<canvas id="sori-canvas"></canvas>
 <main class="sori-ai">
   <section class="intro">
@@ -408,6 +472,7 @@ requestAnimationFrame(loop);`);
     }
 
     setSaved(true);
+    setHasSavedCustomTheme(true);
   };
 
   return (
@@ -434,10 +499,23 @@ requestAnimationFrame(loop);`);
 
       <View style={[styles.workspace, compact && styles.workspaceCompact]}>
         <View style={[styles.leftPanel, compact && styles.leftPanelCompact]}>
+          <Text style={styles.sectionTitle}>Custom theme</Text>
+          <Pressable
+            onPress={chooseCustomTheme}
+            style={[styles.customThemeCard, editorMode === 'custom' && styles.customThemeCardActive]}>
+            <Text style={styles.themeName}>Custom Theme</Text>
+            <Text style={styles.themeDescription}>
+              Edit your saved HTML, CSS, and JavaScript without starting over.
+            </Text>
+            <Text style={styles.customThemeStatus}>
+              {hasSavedCustomTheme ? 'Saved code ready' : 'Start custom code'}
+            </Text>
+          </Pressable>
+
           <Text style={styles.sectionTitle}>Free themes</Text>
           <View style={styles.themeList}>
             {starterThemes.map((theme) => {
-              const active = selectedTheme === theme.name;
+              const active = editorMode === 'theme' && selectedTheme === theme.name;
               return (
                 <Pressable
                   key={theme.name}
@@ -488,7 +566,7 @@ requestAnimationFrame(loop);`);
             value={htmlCode}
             onChangeText={(value) => {
               setHtmlCode(value);
-              setSaved(false);
+              markCustomEditing();
             }}
             multiline
             style={styles.codeInput}
@@ -502,7 +580,7 @@ requestAnimationFrame(loop);`);
             value={cssCode}
             onChangeText={(value) => {
               setCssCode(value);
-              setSaved(false);
+              markCustomEditing();
             }}
             multiline
             style={[styles.codeInput, styles.cssInput]}
@@ -516,7 +594,7 @@ requestAnimationFrame(loop);`);
             value={jsCode}
             onChangeText={(value) => {
               setJsCode(value);
-              setSaved(false);
+              markCustomEditing();
             }}
             multiline
             style={[styles.codeInput, styles.jsInput]}
@@ -529,7 +607,7 @@ requestAnimationFrame(loop);`);
         <View style={[styles.previewPanel, compact && styles.previewPanelCompact]}>
           <View style={styles.previewHeader}>
             <Text style={styles.sectionTitle}>Live preview</Text>
-            <Text style={styles.previewTheme}>{selected.name}</Text>
+            <Text style={styles.previewTheme}>{previewThemeName}</Text>
           </View>
           <View style={[styles.previewFrame, compact && styles.previewFrameCompact]}>
             <PreviewFrame enabled={previewEnabled} html={htmlCode} css={cssCode} js={jsCode} />
@@ -648,6 +726,17 @@ const styles = StyleSheet.create({
   themeList: {
     gap: 10,
   },
+  customThemeCard: {
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: 'rgba(103,232,249,0.22)',
+    backgroundColor: '#07111d',
+    padding: 15,
+  },
+  customThemeCardActive: {
+    borderColor: '#67e8f9',
+    backgroundColor: 'rgba(103,232,249,0.14)',
+  },
   themeCard: {
     borderRadius: 20,
     borderWidth: 1,
@@ -672,6 +761,12 @@ const styles = StyleSheet.create({
   },
   themeStatus: {
     color: '#67e8f9',
+    fontSize: 12,
+    fontWeight: '900',
+    marginTop: 8,
+  },
+  customThemeStatus: {
+    color: '#ff3cbf',
     fontSize: 12,
     fontWeight: '900',
     marginTop: 8,
