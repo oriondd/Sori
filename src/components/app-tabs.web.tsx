@@ -2,13 +2,12 @@ import { Link, Slot, usePathname } from 'expo-router';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { CurrentIdentityBadge } from '@/components/identity-badge';
-
 const navItems = [
-  { href: '/dashboard', label: 'Profile Studio', featured: false },
-  { href: '/market', label: 'Designer Market', featured: false },
-  { href: '/create-post', label: 'Create Post', featured: true },
+  { href: '/', label: 'Feed', featured: false },
   { href: '/my-profile', label: 'My Profile', featured: false },
+  { href: '/create-post', label: 'Create Post', featured: true },
+  { href: '/market', label: 'Designer Market', featured: false },
+  { href: '/dashboard', label: 'Profile Studio', featured: false },
 ] as const;
 
 export default function AppTabs() {
@@ -24,17 +23,12 @@ export default function AppTabs() {
         <Link href="/" asChild>
           <Pressable style={({ pressed }) => [styles.brandButton, pressed && styles.pressed]}>
             <Text style={styles.brandText}>SORI</Text>
-            <Text style={styles.brandSubtext}>Feed</Text>
           </Pressable>
         </Link>
 
-        <View style={styles.viewerIdentity}>
-          <CurrentIdentityBadge size="sm" />
-        </View>
-
         <View style={styles.navGroup}>
           {navItems.map((item) => {
-            const active = pathname === item.href;
+            const active = item.href === '/' ? pathname === '/' : pathname === item.href;
             return (
               <Link key={item.href} href={item.href} asChild>
                 <Pressable
@@ -78,7 +72,8 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.12)',
     backgroundColor: 'rgba(9,9,18,0.96)',
     padding: 12,
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
+    gap: 14,
     flexDirection: 'column',
     alignItems: 'stretch',
     shadowColor: '#ff3cbf',
@@ -89,33 +84,20 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     paddingHorizontal: 12,
     paddingVertical: 14,
-    backgroundColor: '#ffffff',
+    backgroundColor: 'rgba(255,60,191,0.13)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,60,191,0.36)',
   },
   brandText: {
-    color: '#050509',
+    color: '#ffffff',
     fontSize: 19,
     lineHeight: 26,
     fontWeight: '900',
     letterSpacing: 3,
   },
-  brandSubtext: {
-    color: '#475569',
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 1.4,
-    marginTop: 2,
-    textTransform: 'uppercase',
-  },
   navGroup: {
-    gap: 12,
+    gap: 10,
     width: '100%',
-  },
-  viewerIdentity: {
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-    backgroundColor: 'rgba(255,255,255,0.045)',
-    padding: 9,
   },
   railButton: {
     minHeight: 48,
@@ -152,10 +134,10 @@ const styles = StyleSheet.create({
     shadowRadius: 18,
   },
   createButtonActive: {
-    backgroundColor: '#ffffff',
+    borderColor: '#ffffff',
   },
   createButtonText: {
-    color: '#050509',
+    color: '#ffffff',
     fontSize: 13,
     fontWeight: '900',
   },

@@ -2,7 +2,7 @@ import { Link } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
-import { FounderVerifiedBadge, IdentityBadge } from '@/components/identity-badge';
+import { IdentityBadge } from '@/components/identity-badge';
 import { formatHandle, getIdentityFromMetadata, type SoriIdentity } from '@/lib/identity';
 import { getSupabase } from '@/lib/supabase';
 
@@ -64,6 +64,26 @@ const responsiveFrameStyle = `
     .tiles, .stack, .memory-grid, .columns { grid-template-columns: 1fr !important; }
     .tiles div, article { min-height: 86px !important; }
   }
+  .sori-system-handle {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: #facc15;
+    font-weight: 900;
+  }
+  .sori-founder-badge {
+    display: inline-grid;
+    place-items: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 999px;
+    background: #facc15;
+    border: 1px solid #fff7ad;
+    color: #451a03;
+    font-size: 12px;
+    font-weight: 900;
+    box-shadow: 0 0 16px rgba(250, 204, 21, .45);
+  }
 `;
 
 function readSavedProfile(): SavedProfile {
@@ -83,8 +103,8 @@ function stripUserCsp(value: string) {
   return value.replace(/<meta[^>]+http-equiv=["']content-security-policy["'][^>]*>/gi, '');
 }
 
-function buildProfileDocument(profile: SavedProfile) {
-  const html = stripUserCsp(profile.html);
+function buildProfileDocument(profile: SavedProfile, identity: SoriIdentity | null) {
+  const html = applyIdentityPlaceholders(stripUserCsp(profile.html), identity);
   const css = profile.css;
   const js = profile.js ?? '';
   const cspMeta = `<meta http-equiv="Content-Security-Policy" content="${FRAME_CSP}" />`;
@@ -118,16 +138,24 @@ ${scriptTag}
 </html>`;
 }
 
+function applyIdentityPlaceholders(html: string, identity: SoriIdentity | null) {
+  const handle = formatHandle(identity?.handle);
+  const badge = identity?.verifiedBadge === 'founder-gold' ? '<span class="sori-founder-badge">&#10003;</span>' : '';
+  return html.replace(/@your-sori/gi, `<span class="sori-system-handle">${handle}${badge}</span>`);
+}
+
 function CustomProfileFrame({
   compact,
   onSafeMode,
   profile,
   safeMode,
+  identity,
 }: {
   compact: boolean;
   onSafeMode: () => void;
   profile: SavedProfile;
   safeMode: boolean;
+  identity: SoriIdentity | null;
 }) {
   if (Platform.OS !== 'web') {
     return (
@@ -152,7 +180,7 @@ function CustomProfileFrame({
 
   return React.createElement('iframe' as any, {
     title: 'Sori custom profile preview',
-    srcDoc: buildProfileDocument(profile),
+    srcDoc: buildProfileDocument(profile, identity),
     sandbox: 'allow-scripts',
     csp: FRAME_CSP,
     onError: onSafeMode,
@@ -277,6 +305,7 @@ export default function MyProfileScreen() {
           {hasCustomCode ? (
             <CustomProfileFrame
               compact={compact}
+              identity={identity}
               onSafeMode={() => setProfileSafeMode(true)}
               profile={profile}
               safeMode={safeMode}
@@ -284,21 +313,12 @@ export default function MyProfileScreen() {
           ) : (
             <DefaultProfile compact={compact} identity={identity} />
           )}
-          {hasCustomCode ? (
-            <View style={styles.profileIdentityOverlay}>
-              <IdentityBadge identity={identity} size="sm" />
-            </View>
-          ) : null}
         </View>
 
         <View style={[styles.sideColumn, compact && styles.sideColumnCompact]}>
           <View style={styles.miniCard}>
             <Text style={styles.miniLabel}>THEME</Text>
             <Text style={styles.miniTitle}>{profile.themeName}</Text>
-            <View style={styles.miniIdentityRow}>
-              <Text style={styles.miniCopy}>{formatHandle(identity?.handle)}</Text>
-              {identity?.verifiedBadge === 'founder-gold' ? <FounderVerifiedBadge size="sm" /> : null}
-            </View>
             {hasCustomCode ? (
               <Pressable
                 style={styles.safeToggle}
