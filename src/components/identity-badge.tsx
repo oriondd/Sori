@@ -1,8 +1,10 @@
-import React, { useEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Animated, Easing, Image, StyleSheet, Text, View } from 'react-native';
 
 import { formatHandle, getIdentityFromMetadata, type SoriIdentity } from '@/lib/identity';
 import { getSupabase } from '@/lib/supabase';
+
+const founderBadgeImage = require('../../assets/images/founder-badge.png');
 
 type IdentityBadgeProps = {
   identity: SoriIdentity | null;
@@ -11,9 +13,47 @@ type IdentityBadgeProps = {
 };
 
 export function FounderVerifiedBadge({ size = 'md' }: { size?: 'sm' | 'md' }) {
+  const sheen = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(sheen, {
+          toValue: 1,
+          duration: 1450,
+          easing: Easing.inOut(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.delay(900),
+        Animated.timing(sheen, {
+          toValue: 0,
+          duration: 0,
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+
+    animation.start();
+    return () => animation.stop();
+  }, [sheen]);
+
+  const compact = size === 'sm';
+  const translateX = sheen.interpolate({
+    inputRange: [0, 1],
+    outputRange: [compact ? -18 : -24, compact ? 22 : 32],
+  });
+
   return (
-    <View style={[styles.goldBadge, size === 'sm' && styles.goldBadgeSmall]}>
-      <Text style={[styles.goldBadgeText, size === 'sm' && styles.goldBadgeTextSmall]}>✓</Text>
+    <View style={[styles.founderBadge, compact && styles.founderBadgeSmall]}>
+      <Image source={founderBadgeImage} style={styles.founderBadgeImage} resizeMode="cover" />
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.founderBadgeSheen,
+          compact && styles.founderBadgeSheenSmall,
+          { transform: [{ translateX }, { rotate: '22deg' }] },
+        ]}
+      />
     </View>
   );
 }
@@ -139,30 +179,38 @@ const styles = StyleSheet.create({
   handleSmall: {
     fontSize: 10,
   },
-  goldBadge: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: '#facc15',
-    alignItems: 'center',
-    justifyContent: 'center',
+  founderBadge: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    overflow: 'hidden',
     borderWidth: 1,
-    borderColor: '#fff7ad',
-    shadowColor: '#facc15',
-    shadowOpacity: 0.45,
-    shadowRadius: 10,
+    borderColor: 'rgba(255,214,232,0.9)',
+    backgroundColor: '#2a111d',
+    shadowColor: '#ff7ab6',
+    shadowOpacity: 0.55,
+    shadowRadius: 12,
   },
-  goldBadgeSmall: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
+  founderBadgeSmall: {
+    width: 19,
+    height: 19,
+    borderRadius: 10,
   },
-  goldBadgeText: {
-    color: '#451a03',
-    fontSize: 13,
-    fontWeight: '900',
+  founderBadgeImage: {
+    width: '100%',
+    height: '100%',
   },
-  goldBadgeTextSmall: {
-    fontSize: 10,
+  founderBadgeSheen: {
+    position: 'absolute',
+    top: -7,
+    bottom: -7,
+    width: 9,
+    backgroundColor: 'rgba(255,255,255,0.72)',
+    opacity: 0.82,
+  },
+  founderBadgeSheenSmall: {
+    top: -5,
+    bottom: -5,
+    width: 6,
   },
 });

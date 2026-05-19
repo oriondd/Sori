@@ -1,6 +1,6 @@
 import { Link } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
 import { IdentityBadge } from '@/components/identity-badge';
 import { formatHandle, getIdentityFromMetadata, type SoriIdentity } from '@/lib/identity';
@@ -16,11 +16,12 @@ type SavedProfile = {
 
 const STORAGE_KEY = 'sori.profile.customization';
 const SAFE_MODE_KEY = 'sori.profile.safeMode';
+const founderBadgeImage = require('../../assets/images/founder-badge.png');
 const FRAME_CSP = [
   "default-src 'none'",
   "script-src 'unsafe-inline'",
   "style-src 'unsafe-inline' https://fonts.googleapis.com",
-  "img-src https://images.unsplash.com https://i.scdn.co https://*.supabase.co data: blob:",
+  "img-src http://localhost:8081 http://127.0.0.1:8081 https://images.unsplash.com https://i.scdn.co https://*.supabase.co data: blob:",
   "media-src https://*.supabase.co https://p.scdn.co https://i.scdn.co data: blob:",
   "font-src https://fonts.gstatic.com data:",
   "connect-src 'none'",
@@ -72,17 +73,38 @@ const responsiveFrameStyle = `
     font-weight: 900;
   }
   .sori-founder-badge {
-    display: inline-grid;
-    place-items: center;
+    position: relative;
+    display: inline-block;
     width: 20px;
     height: 20px;
     border-radius: 999px;
-    background: #facc15;
-    border: 1px solid #fff7ad;
-    color: #451a03;
-    font-size: 12px;
-    font-weight: 900;
-    box-shadow: 0 0 16px rgba(250, 204, 21, .45);
+    overflow: hidden;
+    background: #2a111d;
+    border: 1px solid rgba(255,214,232,.9);
+    box-shadow: 0 0 16px rgba(255,122,182,.45);
+    vertical-align: -4px;
+  }
+  .sori-founder-badge img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .sori-founder-badge::after {
+    content: "";
+    position: absolute;
+    top: -8px;
+    bottom: -8px;
+    width: 7px;
+    left: -16px;
+    background: rgba(255,255,255,.72);
+    transform: rotate(22deg);
+    animation: soriBadgeSheen 2.4s ease-in-out infinite;
+  }
+  @keyframes soriBadgeSheen {
+    0%, 34% { left: -16px; opacity: 0; }
+    48% { opacity: .85; }
+    72%, 100% { left: 30px; opacity: 0; }
   }
 `;
 
@@ -140,8 +162,20 @@ ${scriptTag}
 
 function applyIdentityPlaceholders(html: string, identity: SoriIdentity | null) {
   const handle = formatHandle(identity?.handle);
-  const badge = identity?.verifiedBadge === 'founder-gold' ? '<span class="sori-founder-badge">&#10003;</span>' : '';
+  const badgeUri = getFounderBadgeUri();
+  const badge = identity?.verifiedBadge === 'founder-gold'
+    ? `<span class="sori-founder-badge"><img src="${badgeUri}" alt="Founder verified" /></span>`
+    : '';
   return html.replace(/@your-sori/gi, `<span class="sori-system-handle">${handle}${badge}</span>`);
+}
+
+function getFounderBadgeUri() {
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    return `${window.location.origin}/founder-badge.png`;
+  }
+
+  const resolver = (Image as unknown as { resolveAssetSource?: (source: unknown) => { uri: string } }).resolveAssetSource;
+  return resolver ? resolver(founderBadgeImage).uri : '';
 }
 
 function CustomProfileFrame({
