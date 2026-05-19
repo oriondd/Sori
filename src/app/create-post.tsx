@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 
+import { CurrentIdentityBadge } from '@/components/identity-badge';
+
 export default function CreatePostScreen() {
   const [postText, setPostText] = useState('');
   const { width } = useWindowDimensions();
@@ -19,6 +21,10 @@ export default function CreatePostScreen() {
         <Text style={styles.subtitle}>
           Start with text now. Photo and video upload slots are staged for the next media pass.
         </Text>
+
+        <View style={styles.identityStrip}>
+          <CurrentIdentityBadge size="md" />
+        </View>
 
         <TextInput
           style={styles.textArea}
@@ -87,6 +93,14 @@ const styles = StyleSheet.create({
     lineHeight: 25,
     marginTop: 10,
   },
+  identityStrip: {
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: 'rgba(255,255,255,0.055)',
+    padding: 14,
+    marginTop: 20,
+  },
   textArea: {
     minHeight: 180,
     borderRadius: 18,
@@ -96,7 +110,7 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     padding: 16,
     fontSize: 16,
-    marginTop: 22,
+    marginTop: 14,
     textAlignVertical: 'top',
   },
   mediaRow: {

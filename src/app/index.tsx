@@ -2,6 +2,8 @@ import { Link } from 'expo-router';
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { CurrentIdentityBadge } from '@/components/identity-badge';
+
 export default function FeedScreen() {
   return (
     <ScrollView style={styles.page} contentContainerStyle={styles.content}>
@@ -16,9 +18,7 @@ export default function FeedScreen() {
         </View>
 
         <View style={styles.composerPrompt}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>S</Text>
-          </View>
+          <CurrentIdentityBadge size="md" />
           <View style={styles.promptCopy}>
             <Text style={styles.promptTitle}>No posts yet.</Text>
             <Text style={styles.promptText}>Create the first Sori post or follow profiles as they join.</Text>
@@ -118,20 +118,6 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.12)',
     backgroundColor: 'rgba(15,23,42,0.86)',
     padding: 16,
-  },
-  avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#ffffff',
-    alignItems: 'center',
-    justifyContent: 'center',
-    alignSelf: 'flex-start',
-  },
-  avatarText: {
-    color: '#050509',
-    fontSize: 22,
-    fontWeight: '900',
   },
   promptCopy: {
     flex: 1,

@@ -2,6 +2,8 @@ import { Link, Slot, usePathname } from 'expo-router';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { CurrentIdentityBadge } from '@/components/identity-badge';
+
 const navItems = [
   { href: '/dashboard', label: 'Profile Studio', featured: false },
   { href: '/market', label: 'Designer Market', featured: false },
@@ -25,6 +27,10 @@ export default function AppTabs() {
             <Text style={styles.brandSubtext}>Feed</Text>
           </Pressable>
         </Link>
+
+        <View style={styles.viewerIdentity}>
+          <CurrentIdentityBadge size="sm" />
+        </View>
 
         <View style={styles.navGroup}>
           {navItems.map((item) => {
@@ -103,6 +109,13 @@ const styles = StyleSheet.create({
   navGroup: {
     gap: 12,
     width: '100%',
+  },
+  viewerIdentity: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: 'rgba(255,255,255,0.045)',
+    padding: 9,
   },
   railButton: {
     minHeight: 48,

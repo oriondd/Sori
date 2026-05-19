@@ -2,6 +2,7 @@ import { Link } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
+import { FounderVerifiedBadge, IdentityBadge } from '@/components/identity-badge';
 import { formatHandle, getIdentityFromMetadata, type SoriIdentity } from '@/lib/identity';
 import { getSupabase } from '@/lib/supabase';
 
@@ -176,30 +177,15 @@ function GoldFounderBadge() {
 }
 
 function DefaultProfile({ compact, identity }: { compact: boolean; identity: SoriIdentity | null }) {
-  const displayName = identity?.displayName || 'Your story starts here';
-  const handle = formatHandle(identity?.handle);
-
   return (
     <View style={[styles.defaultCanvas, compact && styles.defaultCanvasCompact]}>
       <View style={styles.glowOne} />
       <View style={styles.glowTwo} />
       <View style={[styles.profileHeader, compact && styles.profileHeaderCompact]}>
-        <View style={[styles.avatar, compact && styles.avatarCompact]}>
-          <Text style={styles.avatarText}>S</Text>
-        </View>
-        <View style={styles.identityBlock}>
-          <Text style={styles.handle}>{handle}</Text>
-          <View style={styles.profileNameRow}>
-            <Text style={[styles.profileTitle, compact && styles.profileTitleCompact]}>
-              {compact ? displayName : displayName}
-            </Text>
-            {identity?.verifiedBadge === 'founder-gold' ? <GoldFounderBadge /> : null}
-          </View>
-          <Text style={styles.identityHandle}>{handle}</Text>
-          <Text style={[styles.mood, compact && styles.moodCompact]}>
-            {compact ? 'Mood: building my Sori page.' : 'Mood: building a corner of the internet that feels like me.'}
-          </Text>
-        </View>
+        <IdentityBadge identity={identity} size={compact ? 'md' : 'lg'} />
+        <Text style={[styles.mood, compact && styles.moodCompact]}>
+          {compact ? 'Mood: building my Sori page.' : 'Mood: building a corner of the internet that feels like me.'}
+        </Text>
       </View>
 
       <View style={styles.profilePanels}>
@@ -298,6 +284,11 @@ export default function MyProfileScreen() {
           ) : (
             <DefaultProfile compact={compact} identity={identity} />
           )}
+          {hasCustomCode ? (
+            <View style={styles.profileIdentityOverlay}>
+              <IdentityBadge identity={identity} size="sm" />
+            </View>
+          ) : null}
         </View>
 
         <View style={[styles.sideColumn, compact && styles.sideColumnCompact]}>
@@ -306,7 +297,7 @@ export default function MyProfileScreen() {
             <Text style={styles.miniTitle}>{profile.themeName}</Text>
             <View style={styles.miniIdentityRow}>
               <Text style={styles.miniCopy}>{formatHandle(identity?.handle)}</Text>
-              {identity?.verifiedBadge === 'founder-gold' ? <GoldFounderBadge /> : null}
+              {identity?.verifiedBadge === 'founder-gold' ? <FounderVerifiedBadge size="sm" /> : null}
             </View>
             {hasCustomCode ? (
               <Pressable
@@ -418,6 +409,18 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.12)',
     backgroundColor: '#080812',
     overflow: 'hidden',
+  },
+  profileIdentityOverlay: {
+    position: 'absolute',
+    left: 16,
+    top: 16,
+    right: 16,
+    zIndex: 5,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.14)',
+    backgroundColor: 'rgba(5,5,9,0.72)',
+    padding: 10,
   },
   mainProfileCompact: {
     minWidth: 0,

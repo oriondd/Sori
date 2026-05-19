@@ -2,6 +2,7 @@ import { Link, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
+import { IdentityBadge } from '@/components/identity-badge';
 import { getIdentityFromMetadata, type SoriIdentity } from '@/lib/identity';
 import { getSupabase } from '@/lib/supabase';
 
@@ -64,11 +65,11 @@ export default function DashboardScreen() {
           <Text style={styles.kicker}>SORI DASHBOARD</Text>
           <Text style={styles.title}>Welcome to your profile studio.</Text>
           <Text style={styles.subtitle}>
-            {identity?.handle
-              ? `${identity.displayName} ${identity.isFounder ? 'is founder verified' : 'is live'} as @${identity.handle}.`
-              : 'Your account is active.'}{' '}
             This is the control room for your profile, media, grid, and theme settings.
           </Text>
+          <View style={styles.identityStrip}>
+            <IdentityBadge identity={identity} size="md" />
+          </View>
         </View>
 
         <Link href="/my-profile" asChild>
@@ -171,6 +172,16 @@ const styles = StyleSheet.create({
     lineHeight: 25,
     marginTop: 12,
     maxWidth: 680,
+  },
+  identityStrip: {
+    alignSelf: 'flex-start',
+    minWidth: 260,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: 'rgba(255,255,255,0.055)',
+    padding: 14,
+    marginTop: 16,
   },
   previewButton: {
     height: 48,
