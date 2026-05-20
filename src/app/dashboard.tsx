@@ -28,29 +28,43 @@ export default function DashboardScreen() {
   const router = useRouter();
   const { width } = useWindowDimensions();
   const [identity, setIdentity] = useState<SoriIdentity | null>(null);
+  const [identityLoading, setIdentityLoading] = useState(true);
   const compact = width < 900;
 
   useEffect(() => {
+    let mounted = true;
+
     async function requireHandle() {
-      const { data } = await getSupabase().auth.getUser();
-      const user = data?.user;
+      try {
+        const { data } = await getSupabase().auth.getUser();
+        const user = data?.user;
 
-      if (!user) {
-        router.replace('/login');
-        return;
+        if (!user) {
+          router.replace('/login');
+          return;
+        }
+
+        const currentIdentity = getIdentityFromMetadata(user.user_metadata);
+
+        if (!currentIdentity.handle) {
+          router.replace('/claim-handle');
+          return;
+        }
+
+        if (mounted) {
+          setIdentity(currentIdentity);
+        }
+      } finally {
+        if (mounted) {
+          setIdentityLoading(false);
+        }
       }
-
-      const currentIdentity = getIdentityFromMetadata(user.user_metadata);
-
-      if (!currentIdentity.handle) {
-        router.replace('/claim-handle');
-        return;
-      }
-
-      setIdentity(currentIdentity);
     }
 
     requireHandle();
+    return () => {
+      mounted = false;
+    };
   }, [router]);
 
   return (
@@ -68,7 +82,7 @@ export default function DashboardScreen() {
             This is the control room for your profile, media, grid, and theme settings.
           </Text>
           <View style={styles.identityStrip}>
-            <IdentityBadge identity={identity} size="md" />
+            <IdentityBadge identity={identity} loading={identityLoading} size="md" />
           </View>
         </View>
 

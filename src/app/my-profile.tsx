@@ -237,13 +237,21 @@ function GoldFounderBadge() {
   );
 }
 
-function DefaultProfile({ compact, identity }: { compact: boolean; identity: SoriIdentity | null }) {
+function DefaultProfile({
+  compact,
+  identity,
+  identityLoading = false,
+}: {
+  compact: boolean;
+  identity: SoriIdentity | null;
+  identityLoading?: boolean;
+}) {
   return (
     <View style={[styles.defaultCanvas, compact && styles.defaultCanvasCompact]}>
       <View style={styles.glowOne} />
       <View style={styles.glowTwo} />
       <View style={[styles.profileHeader, compact && styles.profileHeaderCompact]}>
-        <IdentityBadge identity={identity} size={compact ? 'md' : 'lg'} />
+        <IdentityBadge identity={identity} loading={identityLoading} size={compact ? 'md' : 'lg'} />
         <Text style={[styles.mood, compact && styles.moodCompact]}>
           {compact ? 'Mood: building my Sori page.' : 'Mood: building a corner of the internet that feels like me.'}
         </Text>
@@ -284,6 +292,7 @@ export default function MyProfileScreen() {
   const { width } = useWindowDimensions();
   const [profile, setProfile] = useState<SavedProfile>(fallbackProfile);
   const [identity, setIdentity] = useState<SoriIdentity | null>(null);
+  const [identityLoading, setIdentityLoading] = useState(true);
   const [safeMode, setSafeMode] = useState(false);
   const compact = width < 760;
 
@@ -293,15 +302,26 @@ export default function MyProfileScreen() {
       setSafeMode(window.localStorage.getItem(SAFE_MODE_KEY) === 'true');
     }
 
+    let mounted = true;
+
     async function loadIdentity() {
-      const { data } = await getSupabase().auth.getUser();
-      const user = data?.user;
-      if (user) {
-        setIdentity(getIdentityFromMetadata(user.user_metadata));
+      try {
+        const { data } = await getSupabase().auth.getUser();
+        const user = data?.user;
+        if (mounted && user) {
+          setIdentity(getIdentityFromMetadata(user.user_metadata));
+        }
+      } finally {
+        if (mounted) {
+          setIdentityLoading(false);
+        }
       }
     }
 
     loadIdentity();
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   const hasCustomCode = useMemo(
@@ -335,7 +355,9 @@ export default function MyProfileScreen() {
 
       <View style={[styles.profileLayout, compact && styles.profileLayoutCompact]}>
         <View style={[styles.mainProfile, compact && styles.mainProfileCompact]}>
-          {hasCustomCode ? (
+          {identityLoading ? (
+            <DefaultProfile compact={compact} identity={null} identityLoading={identityLoading} />
+          ) : hasCustomCode ? (
             <CustomProfileFrame
               compact={compact}
               identity={identity}
@@ -344,7 +366,7 @@ export default function MyProfileScreen() {
               safeMode={safeMode}
             />
           ) : (
-            <DefaultProfile compact={compact} identity={identity} />
+            <DefaultProfile compact={compact} identity={identity} identityLoading={identityLoading} />
           )}
         </View>
 

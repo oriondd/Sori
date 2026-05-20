@@ -2,7 +2,7 @@ import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 
-import { CurrentIdentityBadge, IdentityBadge } from '@/components/identity-badge';
+import { IdentityBadge } from '@/components/identity-badge';
 import { getIdentityFromMetadata, type SoriIdentity } from '@/lib/identity';
 import { makeMediaId, makePostId, savePost, type PostMediaType, type PostVisibility, type SoriPostMedia, visibilityLabels } from '@/lib/posts';
 import { getSupabase } from '@/lib/supabase';
@@ -76,6 +76,7 @@ export default function CreatePostScreen() {
   const [visibilityMenuOpen, setVisibilityMenuOpen] = useState(false);
   const [media, setMedia] = useState<SoriPostMedia[]>([]);
   const [identity, setIdentity] = useState<SoriIdentity | null>(null);
+  const [identityLoading, setIdentityLoading] = useState(true);
   const [statusMessage, setStatusMessage] = useState('');
   const [isPublishing, setIsPublishing] = useState(false);
   const { width } = useWindowDimensions();
@@ -83,12 +84,25 @@ export default function CreatePostScreen() {
   const canPost = !isPublishing && (postText.trim().length > 0 || media.length > 0);
 
   useEffect(() => {
+    let mounted = true;
+
     async function loadIdentity() {
-      const { data } = await getSupabase().auth.getUser();
-      setIdentity(data?.user ? getIdentityFromMetadata(data.user.user_metadata) : null);
+      try {
+        const { data } = await getSupabase().auth.getUser();
+        if (mounted) {
+          setIdentity(data?.user ? getIdentityFromMetadata(data.user.user_metadata) : null);
+        }
+      } finally {
+        if (mounted) {
+          setIdentityLoading(false);
+        }
+      }
     }
 
     loadIdentity();
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   async function pickMedia(kind: 'image' | 'video') {
@@ -209,7 +223,7 @@ export default function CreatePostScreen() {
         </Text>
 
         <View style={styles.identityStrip}>
-          {identity ? <IdentityBadge identity={identity} size="md" /> : <CurrentIdentityBadge size="md" />}
+          <IdentityBadge identity={identity} loading={identityLoading} size="md" />
           <View style={styles.visibilityGroup}>
             <Text style={styles.visibilityLabel}>Post visibility</Text>
             <Pressable

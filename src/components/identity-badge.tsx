@@ -8,6 +8,7 @@ const founderBadgeImage = require('../../assets/images/founder-badge.png');
 
 type IdentityBadgeProps = {
   identity: SoriIdentity | null;
+  loading?: boolean;
   size?: 'sm' | 'md' | 'lg';
   showAvatar?: boolean;
 };
@@ -58,7 +59,66 @@ export function FounderVerifiedBadge({ size = 'md' }: { size?: 'sm' | 'md' }) {
   );
 }
 
-export function IdentityBadge({ identity, showAvatar = true, size = 'md' }: IdentityBadgeProps) {
+function IdentityBadgeSkeleton({ showAvatar = true, size = 'md' }: Omit<IdentityBadgeProps, 'identity'>) {
+  const pulse = useRef(new Animated.Value(0.42)).current;
+
+  useEffect(() => {
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, {
+          toValue: 1,
+          duration: 780,
+          easing: Easing.inOut(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulse, {
+          toValue: 0.42,
+          duration: 780,
+          easing: Easing.inOut(Easing.cubic),
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+
+    animation.start();
+    return () => animation.stop();
+  }, [pulse]);
+
+  const compact = size === 'sm';
+  const large = size === 'lg';
+
+  return (
+    <View style={styles.row}>
+      {showAvatar ? (
+        <Animated.View
+          style={[
+            styles.avatarSkeleton,
+            compact && styles.avatarSkeletonSmall,
+            large && styles.avatarSkeletonLarge,
+            { opacity: pulse },
+          ]}
+        />
+      ) : null}
+      <View style={styles.copy}>
+        <Animated.View
+          style={[
+            styles.nameSkeleton,
+            compact && styles.nameSkeletonSmall,
+            large && styles.nameSkeletonLarge,
+            { opacity: pulse },
+          ]}
+        />
+        <Animated.View style={[styles.handleSkeleton, compact && styles.handleSkeletonSmall, { opacity: pulse }]} />
+      </View>
+    </View>
+  );
+}
+
+export function IdentityBadge({ identity, loading = false, showAvatar = true, size = 'md' }: IdentityBadgeProps) {
+  if (loading) {
+    return <IdentityBadgeSkeleton loading={loading} showAvatar={showAvatar} size={size} />;
+  }
+
   const displayName = identity?.displayName || 'Sori Creator';
   const handle = formatHandle(identity?.handle);
   const initial = (displayName.trim()[0] || 'S').toUpperCase();
@@ -89,23 +149,35 @@ export function IdentityBadge({ identity, showAvatar = true, size = 'md' }: Iden
   );
 }
 
-export function CurrentIdentityBadge(props: Omit<IdentityBadgeProps, 'identity'>) {
+export function CurrentIdentityBadge(props: Omit<IdentityBadgeProps, 'identity' | 'loading'>) {
   const [identity, setIdentity] = useState<SoriIdentity | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function loadIdentity() {
-      const { data } = await getSupabase().auth.getUser();
-      const user = data?.user;
+    let mounted = true;
 
-      if (user) {
-        setIdentity(getIdentityFromMetadata(user.user_metadata));
+    async function loadIdentity() {
+      try {
+        const { data } = await getSupabase().auth.getUser();
+        const user = data?.user;
+
+        if (mounted && user) {
+          setIdentity(getIdentityFromMetadata(user.user_metadata));
+        }
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
       }
     }
 
     loadIdentity();
+    return () => {
+      mounted = false;
+    };
   }, []);
 
-  return <IdentityBadge identity={identity} {...props} />;
+  return <IdentityBadge identity={identity} {...props} loading={loading} />;
 }
 
 const styles = StyleSheet.create({
@@ -147,9 +219,53 @@ const styles = StyleSheet.create({
   avatarTextLarge: {
     fontSize: 62,
   },
+  avatarSkeleton: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,60,191,0.32)',
+  },
+  avatarSkeletonSmall: {
+    width: 34,
+    height: 34,
+    borderRadius: 11,
+  },
+  avatarSkeletonLarge: {
+    width: 118,
+    height: 118,
+    borderRadius: 28,
+  },
   copy: {
     flex: 1,
     minWidth: 0,
+  },
+  nameSkeleton: {
+    width: 116,
+    height: 15,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+  },
+  nameSkeletonSmall: {
+    width: 78,
+    height: 11,
+  },
+  nameSkeletonLarge: {
+    width: 260,
+    height: 34,
+  },
+  handleSkeleton: {
+    width: 74,
+    height: 11,
+    borderRadius: 999,
+    backgroundColor: 'rgba(250,204,21,0.24)',
+    marginTop: 8,
+  },
+  handleSkeletonSmall: {
+    width: 54,
+    height: 8,
+    marginTop: 6,
   },
   nameRow: {
     flexDirection: 'row',
