@@ -2,6 +2,21 @@ import { Link } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 
+import {
+  fallbackProfile,
+  FRAME_CSP,
+  getSandboxGuardScript,
+  PROFILE_MAX_CSS_CHARS,
+  PROFILE_MAX_HTML_CHARS,
+  PROFILE_MAX_JS_CHARS,
+  readProfileVersions,
+  readSavedProfile,
+  resetProfile,
+  sanitizeProfileHtml,
+  saveProfile as persistProfile,
+  type SavedProfile,
+} from '@/lib/profile-security';
+
 type StarterTheme = {
   name: string;
   description: string;
@@ -9,31 +24,6 @@ type StarterTheme = {
   css: string;
   js: string;
 };
-
-type SavedProfile = {
-  themeName?: string;
-  html?: string;
-  css?: string;
-  js?: string;
-  mode?: 'simple' | 'advanced';
-};
-
-const STORAGE_KEY = 'sori.profile.customization';
-const SAFE_MODE_KEY = 'sori.profile.safeMode';
-const FRAME_CSP = [
-  "default-src 'none'",
-  "script-src 'unsafe-inline'",
-  "style-src 'unsafe-inline' https://fonts.googleapis.com",
-  "img-src https://images.unsplash.com https://i.scdn.co https://*.supabase.co data: blob:",
-  "media-src https://*.supabase.co https://p.scdn.co https://i.scdn.co data: blob:",
-  "font-src https://fonts.gstatic.com data:",
-  "connect-src 'none'",
-  "frame-src 'none'",
-  "object-src 'none'",
-  "base-uri 'none'",
-  "form-action 'none'",
-  "worker-src 'none'",
-].join('; ');
 
 const CUSTOM_THEME_NAME = 'Custom Theme';
 
@@ -229,28 +219,11 @@ function escapeHtml(value: string) {
     .replace(/'/g, '&#039;');
 }
 
-function stripCspBreakingMeta(value: string) {
-  return value.replace(/<meta[^>]+http-equiv=["']content-security-policy["'][^>]*>/gi, '');
-}
-
-function readSavedProfile(): SavedProfile | null {
-  if (Platform.OS !== 'web' || typeof window === 'undefined') {
-    return null;
-  }
-
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
-}
-
 function buildPreviewDocument(html: string, css: string, js: string) {
-  const profileHtml = stripCspBreakingMeta(html);
+  const profileHtml = sanitizeProfileHtml(html);
   const cspMeta = `<meta http-equiv="Content-Security-Policy" content="${FRAME_CSP}" />`;
   const styleTag = `<style>${baseFrameStyle}\n${css}</style>`;
-  const scriptTag = `<script>\n${js}\n</script>`;
+  const scriptTag = `<script>\n${getSandboxGuardScript()}\n</script>\n<script>\n${js}\n</script>`;
 
   if (/<html[\s>]/i.test(profileHtml)) {
     let document = profileHtml;
@@ -301,6 +274,7 @@ function PreviewFrame({ enabled, html, css, js }: { enabled: boolean; html: stri
     srcDoc: buildPreviewDocument(html, css, js),
     sandbox: 'allow-scripts',
     csp: FRAME_CSP,
+    referrerPolicy: 'no-referrer',
     style: {
       width: '100%',
       height: '100%',
@@ -322,14 +296,17 @@ export default function CustomizeProfileScreen() {
   const [previewEnabled, setPreviewEnabled] = useState(true);
   const [saved, setSaved] = useState(false);
   const [hasSavedCustomTheme, setHasSavedCustomTheme] = useState(false);
+  const [versions, setVersions] = useState<SavedProfile[]>([]);
+  const [limitMessage, setLimitMessage] = useState('');
 
   const compact = width < 760;
   const previewThemeName = editorMode === 'custom' ? CUSTOM_THEME_NAME : selectedTheme;
 
   useEffect(() => {
     const savedProfile = readSavedProfile();
+    setVersions(readProfileVersions());
 
-    if (!savedProfile) {
+    if (!savedProfile.html && !savedProfile.css && !savedProfile.js) {
       return;
     }
 
@@ -373,6 +350,30 @@ export default function CustomizeProfileScreen() {
       setSelectedTheme(CUSTOM_THEME_NAME);
     }
     setSaved(false);
+  };
+
+  const updateHtmlCode = (value: string) => {
+    if (value.length > PROFILE_MAX_HTML_CHARS) {
+      setLimitMessage(`HTML is limited to ${PROFILE_MAX_HTML_CHARS.toLocaleString()} characters for the localhost MVP.`);
+    }
+    setHtmlCode(value.slice(0, PROFILE_MAX_HTML_CHARS));
+    markCustomEditing();
+  };
+
+  const updateCssCode = (value: string) => {
+    if (value.length > PROFILE_MAX_CSS_CHARS) {
+      setLimitMessage(`CSS is limited to ${PROFILE_MAX_CSS_CHARS.toLocaleString()} characters for the localhost MVP.`);
+    }
+    setCssCode(value.slice(0, PROFILE_MAX_CSS_CHARS));
+    markCustomEditing();
+  };
+
+  const updateJsCode = (value: string) => {
+    if (value.length > PROFILE_MAX_JS_CHARS) {
+      setLimitMessage(`JavaScript is limited to ${PROFILE_MAX_JS_CHARS.toLocaleString()} characters for the localhost MVP.`);
+    }
+    setJsCode(value.slice(0, PROFILE_MAX_JS_CHARS));
+    markCustomEditing();
   };
 
   const generateAiCode = () => {
@@ -463,16 +464,36 @@ requestAnimationFrame(loop);`);
       html: htmlCode,
       css: cssCode,
       js: jsCode,
-      mode: 'advanced',
+      mode: 'advanced' as const,
     };
 
-    if (Platform.OS === 'web' && typeof window !== 'undefined') {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-      window.localStorage.setItem(SAFE_MODE_KEY, 'false');
-    }
+    persistProfile(payload);
 
     setSaved(true);
     setHasSavedCustomTheme(true);
+    setVersions(readProfileVersions());
+    setLimitMessage('');
+  };
+
+  const resetToDefaultProfile = () => {
+    resetProfile();
+    setSelectedTheme(starterThemes[0].name);
+    setEditorMode('theme');
+    setHtmlCode(starterThemes[0].html);
+    setCssCode(starterThemes[0].css);
+    setJsCode(starterThemes[0].js);
+    setSaved(false);
+    setHasSavedCustomTheme(false);
+    setVersions(readProfileVersions());
+  };
+
+  const restoreVersion = (version: SavedProfile) => {
+    setSelectedTheme(version.themeName || CUSTOM_THEME_NAME);
+    setEditorMode('custom');
+    setHtmlCode(version.html || '');
+    setCssCode(version.css || '');
+    setJsCode(version.js || '');
+    setSaved(false);
   };
 
   return (
@@ -551,7 +572,10 @@ requestAnimationFrame(loop);`);
               <Text style={styles.sectionTitle}>Advanced canvas</Text>
               <Text style={styles.editorNote}>HTML, CSS, and JS run only inside the isolated iframe.</Text>
             </View>
-            <View style={styles.editorActions}>
+          <View style={styles.editorActions}>
+              <Pressable style={styles.resetButton} onPress={resetToDefaultProfile}>
+                <Text style={styles.resetButtonText}>Reset</Text>
+              </Pressable>
               <Pressable style={styles.pauseButton} onPress={() => setPreviewEnabled(!previewEnabled)}>
                 <Text style={styles.pauseButtonText}>{previewEnabled ? 'Pause Preview' : 'Run Preview'}</Text>
               </Pressable>
@@ -561,13 +585,16 @@ requestAnimationFrame(loop);`);
             </View>
           </View>
 
+          {limitMessage ? (
+            <Pressable style={styles.limitNotice} onPress={() => setLimitMessage('')}>
+              <Text style={styles.limitNoticeText}>{limitMessage}</Text>
+            </Pressable>
+          ) : null}
+
           <Text style={styles.codeLabel}>HTML</Text>
           <TextInput
             value={htmlCode}
-            onChangeText={(value) => {
-              setHtmlCode(value);
-              markCustomEditing();
-            }}
+            onChangeText={updateHtmlCode}
             multiline
             style={styles.codeInput}
             textAlignVertical="top"
@@ -578,10 +605,7 @@ requestAnimationFrame(loop);`);
           <Text style={styles.codeLabel}>CSS</Text>
           <TextInput
             value={cssCode}
-            onChangeText={(value) => {
-              setCssCode(value);
-              markCustomEditing();
-            }}
+            onChangeText={updateCssCode}
             multiline
             style={[styles.codeInput, styles.cssInput]}
             textAlignVertical="top"
@@ -592,16 +616,27 @@ requestAnimationFrame(loop);`);
           <Text style={styles.codeLabel}>JavaScript</Text>
           <TextInput
             value={jsCode}
-            onChangeText={(value) => {
-              setJsCode(value);
-              markCustomEditing();
-            }}
+            onChangeText={updateJsCode}
             multiline
             style={[styles.codeInput, styles.jsInput]}
             textAlignVertical="top"
             autoCapitalize="none"
             autoCorrect={false}
           />
+
+          {versions.length ? (
+            <View style={styles.versionPanel}>
+              <Text style={styles.sectionTitle}>Version history</Text>
+              {versions.slice(0, 4).map((version, index) => (
+                <Pressable key={`${version.themeName}-${index}`} style={styles.versionButton} onPress={() => restoreVersion(version)}>
+                  <Text style={styles.versionTitle}>Restore {version.themeName || 'Custom Theme'}</Text>
+                  <Text style={styles.versionMeta}>
+                    HTML {version.html.length} / CSS {version.css.length} / JS {(version.js || '').length}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          ) : null}
         </View>
 
         <View style={[styles.previewPanel, compact && styles.previewPanelCompact]}>
@@ -831,6 +866,22 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 16,
   },
+  resetButton: {
+    minWidth: 78,
+    height: 42,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: 'rgba(248,113,113,0.28)',
+    backgroundColor: 'rgba(248,113,113,0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+  },
+  resetButtonText: {
+    color: '#fecaca',
+    fontSize: 13,
+    fontWeight: '900',
+  },
   pauseButton: {
     minWidth: 112,
     height: 42,
@@ -850,6 +901,19 @@ const styles = StyleSheet.create({
   saveButtonText: {
     color: '#050509',
     fontSize: 14,
+    fontWeight: '900',
+  },
+  limitNotice: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(250,204,21,0.3)',
+    backgroundColor: 'rgba(250,204,21,0.1)',
+    padding: 10,
+    marginBottom: 6,
+  },
+  limitNoticeText: {
+    color: '#fde68a',
+    fontSize: 12,
     fontWeight: '900',
   },
   codeLabel: {
@@ -877,6 +941,33 @@ const styles = StyleSheet.create({
   },
   jsInput: {
     minHeight: 190,
+  },
+  versionPanel: {
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: 'rgba(255,255,255,0.045)',
+    padding: 12,
+    marginTop: 14,
+    gap: 8,
+  },
+  versionButton: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: 'rgba(255,255,255,0.055)',
+    padding: 10,
+  },
+  versionTitle: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  versionMeta: {
+    color: '#94a3b8',
+    fontSize: 11,
+    fontWeight: '800',
+    marginTop: 3,
   },
   previewHeader: {
     flexDirection: 'row',

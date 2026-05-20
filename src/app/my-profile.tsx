@@ -4,43 +4,25 @@ import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDime
 
 import { IdentityBadge } from '@/components/identity-badge';
 import { formatHandle, getIdentityFromMetadata, type SoriIdentity } from '@/lib/identity';
+import {
+  addProfileReport,
+  fallbackProfile,
+  FRAME_CSP,
+  getSandboxGuardScript,
+  isProfileHiddenPendingReview,
+  PROFILE_SAFE_MODE_KEY,
+  readSavedProfile,
+  reportReasons,
+  sanitizeProfileHtml,
+  type ReportReason,
+  type SavedProfile,
+  validateExternalUrl,
+} from '@/lib/profile-security';
 import { getSupabase } from '@/lib/supabase';
 
-type SavedProfile = {
-  themeName: string;
-  html: string;
-  css: string;
-  js?: string;
-  mode?: 'simple' | 'advanced';
-};
-
-const STORAGE_KEY = 'sori.profile.customization';
-const SAFE_MODE_KEY = 'sori.profile.safeMode';
 const founderBadgeImage = require('../../assets/images/founder-badge.png');
-const FRAME_CSP = [
-  "default-src 'none'",
-  "script-src 'unsafe-inline'",
-  "style-src 'unsafe-inline' https://fonts.googleapis.com",
-  "img-src http://localhost:8081 http://127.0.0.1:8081 https://images.unsplash.com https://i.scdn.co https://*.supabase.co data: blob:",
-  "media-src https://*.supabase.co https://p.scdn.co https://i.scdn.co data: blob:",
-  "font-src https://fonts.gstatic.com data:",
-  "connect-src 'none'",
-  "frame-src 'none'",
-  "object-src 'none'",
-  "base-uri 'none'",
-  "form-action 'none'",
-  "worker-src 'none'",
-].join('; ');
 
 const topFriends = ['Bestie', 'Day 1', 'Music', 'Photo', 'Style', 'Top', 'Art', 'Mutual', 'New', 'Wild'];
-
-const fallbackProfile: SavedProfile = {
-  themeName: 'Neon Orbit',
-  html: '',
-  css: '',
-  js: '',
-  mode: 'advanced',
-};
 
 const baseFrameStyle = `
   * { box-sizing: border-box; }
@@ -107,30 +89,17 @@ const responsiveFrameStyle = `
   }
 `;
 
-function readSavedProfile(): SavedProfile {
-  if (Platform.OS !== 'web' || typeof window === 'undefined') {
-    return fallbackProfile;
-  }
-
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    return raw ? { ...fallbackProfile, ...JSON.parse(raw) } : fallbackProfile;
-  } catch {
-    return fallbackProfile;
-  }
-}
-
 function stripUserCsp(value: string) {
   return value.replace(/<meta[^>]+http-equiv=["']content-security-policy["'][^>]*>/gi, '');
 }
 
 function buildProfileDocument(profile: SavedProfile, identity: SoriIdentity | null) {
-  const html = applyIdentityPlaceholders(stripUserCsp(profile.html), identity);
+  const html = applyIdentityPlaceholders(sanitizeProfileHtml(stripUserCsp(profile.html)), identity);
   const css = profile.css;
   const js = profile.js ?? '';
   const cspMeta = `<meta http-equiv="Content-Security-Policy" content="${FRAME_CSP}" />`;
   const styleTag = `<style>${baseFrameStyle}\n${css}\n${responsiveFrameStyle}</style>`;
-  const scriptTag = `<script>\n${js}\n</script>`;
+  const scriptTag = `<script>\n${getSandboxGuardScript()}\n</script>\n<script>\n${js}\n</script>`;
 
   if (/<html[\s>]/i.test(html)) {
     let document = html;
@@ -180,12 +149,18 @@ function getFounderBadgeUri() {
 function CustomProfileFrame({
   compact,
   onSafeMode,
+  onFrameLoaded,
+  onLinkRequest,
+  onSandboxNotice,
   profile,
   safeMode,
   identity,
 }: {
   compact: boolean;
   onSafeMode: () => void;
+  onFrameLoaded: () => void;
+  onLinkRequest: (url: string) => void;
+  onSandboxNotice: (message: string) => void;
   profile: SavedProfile;
   safeMode: boolean;
   identity: SoriIdentity | null;
@@ -211,12 +186,16 @@ function CustomProfileFrame({
     );
   }
 
+  // Production hardening path: move this renderer to a separate origin such as
+  // https://sandbox.sori.com while keeping sandbox="allow-scripts" only.
   return React.createElement('iframe' as any, {
     title: 'Sori custom profile preview',
     srcDoc: buildProfileDocument(profile, identity),
     sandbox: 'allow-scripts',
     csp: FRAME_CSP,
+    onLoad: onFrameLoaded,
     onError: onSafeMode,
+    referrerPolicy: 'no-referrer',
     style: {
       width: compact ? '150%' : '100%',
       height: compact ? '150%' : '100%',
@@ -294,12 +273,20 @@ export default function MyProfileScreen() {
   const [identity, setIdentity] = useState<SoriIdentity | null>(null);
   const [identityLoading, setIdentityLoading] = useState(true);
   const [safeMode, setSafeMode] = useState(false);
+  const [showFrame, setShowFrame] = useState(false);
+  const [frameLoaded, setFrameLoaded] = useState(false);
+  const [sandboxNotice, setSandboxNotice] = useState('');
+  const [externalLink, setExternalLink] = useState<{ url: string; domain: string } | null>(null);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportStatus, setReportStatus] = useState('');
+  const [hiddenPendingReview, setHiddenPendingReview] = useState(false);
   const compact = width < 760;
 
   useEffect(() => {
     setProfile(readSavedProfile());
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
-      setSafeMode(window.localStorage.getItem(SAFE_MODE_KEY) === 'true');
+      setSafeMode(window.localStorage.getItem(PROFILE_SAFE_MODE_KEY) === 'true');
+      setHiddenPendingReview(isProfileHiddenPendingReview());
     }
 
     let mounted = true;
@@ -324,6 +311,37 @@ export default function MyProfileScreen() {
     };
   }, []);
 
+  useEffect(() => {
+    const timer = setTimeout(() => setShowFrame(true), 420);
+    return () => clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') {
+      return undefined;
+    }
+
+    function handleSandboxMessage(event: MessageEvent) {
+      const data = event.data as { type?: string; href?: string; reason?: string };
+
+      if (data?.type === 'SORI_EXTERNAL_LINK_REQUEST' && data.href) {
+        const validation = validateExternalUrl(data.href);
+        if (validation.allowed && validation.url && validation.domain) {
+          setExternalLink({ url: validation.url, domain: validation.domain });
+        } else {
+          setSandboxNotice(validation.reason || 'Unsafe link blocked.');
+        }
+      }
+
+      if (data?.type === 'SORI_BLOCKED_LINK' || data?.type === 'SORI_BLOCKED_FORM') {
+        setSandboxNotice(data.reason || 'Unsafe profile action blocked.');
+      }
+    }
+
+    window.addEventListener('message', handleSandboxMessage);
+    return () => window.removeEventListener('message', handleSandboxMessage);
+  }, []);
+
   const hasCustomCode = useMemo(
     () => profile.html.trim().length > 0 || profile.css.trim().length > 0 || (profile.js ?? '').trim().length > 0,
     [profile],
@@ -331,8 +349,18 @@ export default function MyProfileScreen() {
   const setProfileSafeMode = (enabled: boolean) => {
     setSafeMode(enabled);
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
-      window.localStorage.setItem(SAFE_MODE_KEY, enabled ? 'true' : 'false');
+      window.localStorage.setItem(PROFILE_SAFE_MODE_KEY, enabled ? 'true' : 'false');
     }
+  };
+
+  const showProfileLoading = identityLoading || !showFrame;
+
+  const submitReport = (reason: ReportReason) => {
+    const handle = identity?.handle ? formatHandle(identity.handle) : '@unknown';
+    const reports = addProfileReport({ profileHandle: handle, reason });
+    setReportOpen(false);
+    setReportStatus('Report sent to the local moderator queue.');
+    setHiddenPendingReview(isProfileHiddenPendingReview() || reports.length >= 3);
   };
 
   return (
@@ -351,20 +379,55 @@ export default function MyProfileScreen() {
             <Text style={styles.customizeButtonText}>Customize</Text>
           </Pressable>
         </Link>
+        <Pressable style={styles.reportButton} onPress={() => setReportOpen(true)}>
+          <Text style={styles.reportButtonText}>Report Profile</Text>
+        </Pressable>
       </View>
+
+      {sandboxNotice ? (
+        <Pressable style={styles.securityNotice} onPress={() => setSandboxNotice('')}>
+          <Text style={styles.securityNoticeText}>{sandboxNotice}</Text>
+        </Pressable>
+      ) : null}
+
+      {reportStatus ? (
+        <Pressable style={styles.securityNotice} onPress={() => setReportStatus('')}>
+          <Text style={styles.securityNoticeText}>{reportStatus}</Text>
+        </Pressable>
+      ) : null}
 
       <View style={[styles.profileLayout, compact && styles.profileLayoutCompact]}>
         <View style={[styles.mainProfile, compact && styles.mainProfileCompact]}>
-          {identityLoading ? (
-            <DefaultProfile compact={compact} identity={null} identityLoading={identityLoading} />
+          {hiddenPendingReview ? (
+            <View style={styles.safeModePanel}>
+              <Text style={styles.safeModeTitle}>Profile hidden pending review</Text>
+              <Text style={styles.safeModeText}>
+                This local MVP profile received repeated reports and is hidden until a moderator reviews it.
+              </Text>
+            </View>
+          ) : showProfileLoading ? (
+            <DefaultProfile compact={compact} identity={null} identityLoading />
           ) : hasCustomCode ? (
-            <CustomProfileFrame
-              compact={compact}
-              identity={identity}
-              onSafeMode={() => setProfileSafeMode(true)}
-              profile={profile}
-              safeMode={safeMode}
-            />
+            <>
+              {!frameLoaded ? <View pointerEvents="none" style={styles.frameLoadingOverlay}>
+                <Text style={styles.frameLoadingText}>Loading secure profile canvas...</Text>
+              </View> : null}
+              <CustomProfileFrame
+                compact={compact}
+                identity={identity}
+                onFrameLoaded={() => setFrameLoaded(true)}
+                onLinkRequest={(url) => {
+                  const validation = validateExternalUrl(url);
+                  if (validation.allowed && validation.url && validation.domain) {
+                    setExternalLink({ url: validation.url, domain: validation.domain });
+                  }
+                }}
+                onSafeMode={() => setProfileSafeMode(true)}
+                onSandboxNotice={setSandboxNotice}
+                profile={profile}
+                safeMode={safeMode}
+              />
+            </>
           ) : (
             <DefaultProfile compact={compact} identity={identity} identityLoading={identityLoading} />
           )}
@@ -398,6 +461,49 @@ export default function MyProfileScreen() {
           </View>
         </View>
       </View>
+
+      {externalLink ? (
+        <View style={styles.modalBackdrop}>
+          <View style={styles.warningModal}>
+            <Text style={styles.warningTitle}>You are about to leave Sori.</Text>
+            <Text style={styles.warningText}>Destination domain: {externalLink.domain}</Text>
+            <Text style={styles.warningUrl}>{externalLink.url}</Text>
+            <View style={styles.modalActions}>
+              <Pressable style={styles.cancelButton} onPress={() => setExternalLink(null)}>
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={styles.continueButton}
+                onPress={() => {
+                  const url = externalLink.url;
+                  setExternalLink(null);
+                  window.open(url, '_blank', 'noopener,noreferrer');
+                }}>
+                <Text style={styles.continueButtonText}>Continue</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      ) : null}
+
+      {reportOpen ? (
+        <View style={styles.modalBackdrop}>
+          <View style={styles.warningModal}>
+            <Text style={styles.warningTitle}>Report Profile</Text>
+            <Text style={styles.warningText}>Choose the reason that best describes the problem.</Text>
+            <View style={styles.reportReasonList}>
+              {reportReasons.map((reason) => (
+                <Pressable key={reason.id} style={styles.reportReasonButton} onPress={() => submitReport(reason.id)}>
+                  <Text style={styles.reportReasonText}>{reason.label}</Text>
+                </Pressable>
+              ))}
+            </View>
+            <Pressable style={styles.cancelButton} onPress={() => setReportOpen(false)}>
+              <Text style={styles.cancelButtonText}>Cancel</Text>
+            </Pressable>
+          </View>
+        </View>
+      ) : null}
     </ScrollView>
   );
 }
@@ -466,6 +572,34 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '900',
   },
+  reportButton: {
+    minWidth: 126,
+    height: 44,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: 'rgba(248,113,113,0.32)',
+    backgroundColor: 'rgba(248,113,113,0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+  },
+  reportButtonText: {
+    color: '#fecaca',
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  securityNotice: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(250,204,21,0.28)',
+    backgroundColor: 'rgba(250,204,21,0.1)',
+    padding: 12,
+  },
+  securityNoticeText: {
+    color: '#fde68a',
+    fontSize: 13,
+    fontWeight: '900',
+  },
   profileLayout: {
     flexDirection: 'row',
     alignItems: 'stretch',
@@ -484,6 +618,19 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.12)',
     backgroundColor: '#080812',
     overflow: 'hidden',
+  },
+  frameLoadingOverlay: {
+    position: 'absolute',
+    inset: 0,
+    zIndex: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#090914',
+  },
+  frameLoadingText: {
+    color: '#cbd5e1',
+    fontSize: 15,
+    fontWeight: '900',
   },
   profileIdentityOverlay: {
     position: 'absolute',
@@ -781,6 +928,98 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 10,
     maxWidth: 420,
+  },
+  modalBackdrop: {
+    position: 'absolute',
+    left: 160,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    zIndex: 100,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(5,5,9,0.72)',
+    padding: 18,
+  },
+  warningModal: {
+    width: '100%',
+    maxWidth: 520,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.14)',
+    backgroundColor: '#0f172a',
+    padding: 20,
+  },
+  warningTitle: {
+    color: '#ffffff',
+    fontSize: 24,
+    lineHeight: 29,
+    fontWeight: '900',
+  },
+  warningText: {
+    color: '#cbd5e1',
+    fontSize: 14,
+    lineHeight: 21,
+    marginTop: 8,
+  },
+  warningUrl: {
+    color: '#67e8f9',
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: '800',
+    marginTop: 10,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 10,
+    marginTop: 18,
+  },
+  cancelButton: {
+    minHeight: 42,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.14)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+  },
+  cancelButtonText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  continueButton: {
+    minHeight: 42,
+    borderRadius: 14,
+    backgroundColor: '#ff3cbf',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+  },
+  continueButtonText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  reportReasonList: {
+    gap: 8,
+    marginTop: 16,
+    marginBottom: 12,
+  },
+  reportReasonButton: {
+    minHeight: 40,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: 'rgba(255,255,255,0.055)',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+  },
+  reportReasonText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '900',
   },
   topTenCard: {
     borderRadius: 24,
