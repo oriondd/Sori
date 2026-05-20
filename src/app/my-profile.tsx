@@ -88,6 +88,7 @@ const responsiveFrameStyle = `
     width: 100%;
     height: 100%;
     object-fit: cover;
+    transform: scale(1.55);
   }
   .sori-founder-badge::after {
     content: "";
