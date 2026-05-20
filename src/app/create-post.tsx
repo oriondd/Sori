@@ -1,4 +1,4 @@
-import { Link } from 'expo-router';
+import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 
@@ -148,6 +148,7 @@ export default function CreatePostScreen() {
     setVisibility('public');
     setVisibilityMenuOpen(false);
     setStatusMessage('Posted to the Sori feed.');
+    router.replace('/');
   }
 
   return (
@@ -246,13 +247,6 @@ export default function CreatePostScreen() {
           <Text style={styles.postButtonText}>Post to Sori</Text>
         </Pressable>
 
-        {statusMessage === 'Posted to the Sori feed.' ? (
-          <Link href="/" asChild>
-            <Pressable style={styles.feedButton}>
-              <Text style={styles.feedButtonText}>View Feed</Text>
-            </Pressable>
-          </Link>
-        ) : null}
       </View>
     </ScrollView>
   );
@@ -460,20 +454,6 @@ const styles = StyleSheet.create({
   postButtonText: {
     color: '#ffffff',
     fontSize: 16,
-    fontWeight: '900',
-  },
-  feedButton: {
-    height: 48,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.14)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 10,
-  },
-  feedButtonText: {
-    color: '#ffffff',
-    fontSize: 14,
     fontWeight: '900',
   },
   pressed: {
