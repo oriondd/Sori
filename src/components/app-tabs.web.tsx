@@ -3,11 +3,11 @@ import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 const navItems = [
-  { href: '/', label: 'Feed', icon: 'F', accent: '#67e8f9', bg: 'rgba(103,232,249,0.1)', activeBg: 'rgba(103,232,249,0.22)', featured: false },
-  { href: '/my-profile', label: 'My Profile', icon: 'P', accent: '#ff3cbf', bg: 'rgba(255,60,191,0.1)', activeBg: 'rgba(255,60,191,0.22)', featured: false },
-  { href: '/create-post', label: 'Create Post', icon: '+', accent: '#facc15', bg: 'rgba(250,204,21,0.13)', activeBg: 'rgba(250,204,21,0.26)', featured: true },
-  { href: '/market', label: 'Designer Market', icon: 'M', accent: '#a78bfa', bg: 'rgba(167,139,250,0.11)', activeBg: 'rgba(167,139,250,0.24)', featured: false },
-  { href: '/dashboard', label: 'Profile Studio', icon: 'S', accent: '#34d399', bg: 'rgba(52,211,153,0.1)', activeBg: 'rgba(52,211,153,0.22)', featured: false },
+  { href: '/', label: 'Feed', accent: '#67e8f9', bg: 'rgba(103,232,249,0.24)', activeBg: 'rgba(103,232,249,0.42)', featured: false },
+  { href: '/my-profile', label: 'My Profile', accent: '#ff3cbf', bg: 'rgba(255,60,191,0.24)', activeBg: 'rgba(255,60,191,0.42)', featured: false },
+  { href: '/create-post', label: 'Create Post', accent: '#facc15', bg: 'rgba(250,204,21,0.25)', activeBg: 'rgba(250,204,21,0.46)', featured: true },
+  { href: '/market', label: 'Market', accent: '#a78bfa', bg: 'rgba(167,139,250,0.24)', activeBg: 'rgba(167,139,250,0.42)', featured: false },
+  { href: '/dashboard', label: 'Studio', accent: '#34d399', bg: 'rgba(52,211,153,0.24)', activeBg: 'rgba(52,211,153,0.42)', featured: false },
 ] as const;
 
 export default function AppTabs() {
@@ -36,24 +36,24 @@ export default function AppTabs() {
                     StyleSheet.flatten([
                       styles.railButton,
                       item.featured && styles.createButton,
-                      {
-                        borderColor: active ? item.accent : `${item.accent}40`,
-                        backgroundColor: active ? item.activeBg : item.bg,
-                        shadowColor: item.accent,
-                      },
+                      { shadowColor: item.accent },
                       active && styles.railButtonActive,
                       pressed && styles.pressedButton,
                     ])
                   }>
-                  <View style={styles.navButtonContent}>
-                    <View style={[styles.iconBadge, { backgroundColor: item.accent }]}>
-                      <Text style={styles.iconText}>{item.icon}</Text>
-                    </View>
+                  <View
+                    style={[
+                      styles.navButtonContent,
+                      {
+                        borderColor: active ? item.accent : `${item.accent}a8`,
+                        backgroundColor: active ? item.activeBg : item.bg,
+                      },
+                    ]}>
                     <Text style={[styles.railButtonText, active && styles.railButtonTextActive]}>
                       {item.label}
                     </Text>
+                    {active ? <View style={[styles.activeGlow, { backgroundColor: item.accent }]} /> : null}
                   </View>
-                  {active ? <View style={[styles.activeGlow, { backgroundColor: item.accent }]} /> : null}
                 </Pressable>
               </Link>
             );
@@ -80,14 +80,14 @@ const styles = StyleSheet.create({
     top: 18,
     bottom: 18,
     zIndex: 30,
-    width: 148,
+    width: 156,
     borderRadius: 26,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.12)',
     backgroundColor: 'rgba(9,9,18,0.96)',
-    padding: 12,
+    padding: 11,
     justifyContent: 'flex-start',
-    gap: 14,
+    gap: 12,
     flexDirection: 'column',
     alignItems: 'stretch',
     shadowColor: '#ff3cbf',
@@ -117,58 +117,50 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   railButton: {
-    minHeight: 52,
-    borderRadius: 16,
-    borderWidth: 1,
-    overflow: 'hidden',
+    minHeight: 46,
+    borderRadius: 18,
     justifyContent: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 7,
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
+    shadowOpacity: 0.18,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
   },
   railButtonActive: {
-    shadowOpacity: 0.28,
-    shadowRadius: 18,
+    shadowOpacity: 0.36,
+    shadowRadius: 20,
+    transform: [{ translateX: 2 }],
   },
   navButtonContent: {
+    minHeight: 44,
+    borderRadius: 16,
+    borderWidth: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
-  iconBadge: {
-    width: 27,
-    height: 27,
-    borderRadius: 10,
-    alignItems: 'center',
     justifyContent: 'center',
-  },
-  iconText: {
-    color: '#050509',
-    fontSize: 13,
-    fontWeight: '900',
+    overflow: 'hidden',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    width: '100%',
   },
   railButtonText: {
-    color: '#cbd5e1',
-    fontSize: 11,
+    color: '#ffffff',
+    fontSize: 12,
     fontWeight: '900',
-    lineHeight: 14,
-    width: 72,
+    lineHeight: 16,
+    textAlign: 'center',
   },
   railButtonTextActive: {
     color: '#ffffff',
   },
   createButton: {
-    minHeight: 56,
+    minHeight: 54,
   },
   activeGlow: {
     position: 'absolute',
-    right: 0,
-    top: 10,
-    bottom: 10,
+    left: 8,
+    top: 9,
+    bottom: 9,
     width: 3,
-    borderTopLeftRadius: 999,
-    borderBottomLeftRadius: 999,
+    borderRadius: 999,
   },
   pressedButton: {
     opacity: 0.82,
