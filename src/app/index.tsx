@@ -27,12 +27,45 @@ function WebFeedVideo({ uri }: { uri: string }) {
     playsInline: true,
     style: {
       width: '100%',
+      height: '100%',
+      display: 'block',
       maxHeight: 520,
       objectFit: 'cover',
       borderRadius: 18,
       backgroundColor: '#050509',
     },
   });
+}
+
+function FeedImagePreview({ uri }: { uri: string }) {
+  if (uri.startsWith('indexeddb:')) {
+    return <MediaUnavailable label="Photo is still processing. Try refreshing the feed." />;
+  }
+
+  if (Platform.OS === 'web') {
+    return React.createElement('img', {
+      src: uri,
+      alt: '',
+      style: {
+        width: '100%',
+        height: '100%',
+        display: 'block',
+        objectFit: 'cover',
+        borderRadius: 18,
+        backgroundColor: '#050509',
+      },
+    });
+  }
+
+  return <Image source={{ uri }} style={styles.feedImage} resizeMode="cover" />;
+}
+
+function MediaUnavailable({ label }: { label: string }) {
+  return (
+    <View style={styles.mediaUnavailable}>
+      <Text style={styles.mediaUnavailableText}>{label}</Text>
+    </View>
+  );
 }
 
 function formatPostTime(value: string) {
@@ -233,7 +266,9 @@ export default function FeedScreen() {
                     {post.media.map((item) => (
                       <View key={item.id} style={styles.feedMediaCard}>
                         {item.type === 'image' ? (
-                          <Image source={{ uri: item.uri }} style={styles.feedImage} resizeMode="cover" />
+                          <FeedImagePreview uri={item.uri} />
+                        ) : item.uri.startsWith('indexeddb:') ? (
+                          <MediaUnavailable label="Video is still processing. Try refreshing the feed." />
                         ) : (
                           <WebFeedVideo uri={item.uri} />
                         )}
@@ -593,6 +628,18 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 330,
     backgroundColor: '#050509',
+  },
+  mediaUnavailable: {
+    minHeight: 230,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 18,
+  },
+  mediaUnavailableText: {
+    color: '#94a3b8',
+    fontSize: 13,
+    fontWeight: '900',
+    textAlign: 'center',
   },
   postActions: {
     flexDirection: 'row',

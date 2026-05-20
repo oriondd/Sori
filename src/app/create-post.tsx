@@ -22,6 +22,15 @@ function getMediaType(file: File): PostMediaType | null {
   return null;
 }
 
+function readFileAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
 function WebVideoPreview({ uri }: { uri: string }) {
   if (Platform.OS !== 'web') {
     return null;
@@ -40,6 +49,25 @@ function WebVideoPreview({ uri }: { uri: string }) {
       backgroundColor: '#050509',
     },
   });
+}
+
+function ComposerImagePreview({ uri }: { uri: string }) {
+  if (Platform.OS === 'web') {
+    return React.createElement('img', {
+      src: uri,
+      alt: '',
+      style: {
+        width: '100%',
+        height: 120,
+        display: 'block',
+        objectFit: 'cover',
+        borderRadius: 14,
+        backgroundColor: '#050509',
+      },
+    });
+  }
+
+  return <Image source={{ uri }} style={styles.previewImage} resizeMode="cover" />;
 }
 
 export default function CreatePostScreen() {
@@ -96,6 +124,7 @@ export default function CreatePostScreen() {
             type,
             name: file.name,
             uri: URL.createObjectURL(file),
+            fallbackUri: type === 'image' ? await readFileAsDataUrl(file) : undefined,
             blob: file,
           };
         }),
@@ -235,7 +264,7 @@ export default function CreatePostScreen() {
             {media.map((item) => (
               <View key={item.id} style={styles.previewCard}>
                 {item.type === 'image' ? (
-                  <Image source={{ uri: item.uri }} style={styles.previewImage} resizeMode="cover" />
+                  <ComposerImagePreview uri={item.uri} />
                 ) : (
                   <WebVideoPreview uri={item.uri} />
                 )}

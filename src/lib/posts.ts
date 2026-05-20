@@ -10,6 +10,7 @@ export type SoriPostMedia = {
   type: PostMediaType;
   name: string;
   uri: string;
+  fallbackUri?: string;
   blob?: Blob;
 };
 
@@ -113,6 +114,7 @@ async function saveMediaBlob(media: SoriPostMedia) {
     id: media.id,
     type: media.type,
     name: media.name,
+    fallbackUri: media.fallbackUri,
     uri: `${MEDIA_URI_PREFIX}${media.id}`,
   };
 }
@@ -138,6 +140,13 @@ async function resolveMediaUri(media: SoriPostMedia) {
     }>('readonly', (store) => store.get(media.id));
 
     if (!mediaRecord?.blob) {
+      if (media.fallbackUri) {
+        return {
+          ...media,
+          uri: media.fallbackUri,
+        };
+      }
+
       return media;
     }
 
