@@ -1,10 +1,64 @@
 import { Link } from 'expo-router';
-import React from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { CurrentIdentityBadge } from '@/components/identity-badge';
+import { CurrentIdentityBadge, IdentityBadge } from '@/components/identity-badge';
+import { POSTS_CHANGED_EVENT, readPosts, type SoriPost, visibilityLabels } from '@/lib/posts';
+
+function WebFeedVideo({ uri }: { uri: string }) {
+  if (Platform.OS !== 'web') {
+    return null;
+  }
+
+  return React.createElement('video', {
+    src: uri,
+    controls: true,
+    playsInline: true,
+    style: {
+      width: '100%',
+      maxHeight: 520,
+      objectFit: 'cover',
+      borderRadius: 18,
+      backgroundColor: '#050509',
+    },
+  });
+}
+
+function formatPostTime(value: string) {
+  try {
+    return new Intl.DateTimeFormat(undefined, {
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    }).format(new Date(value));
+  } catch {
+    return 'just now';
+  }
+}
 
 export default function FeedScreen() {
+  const [posts, setPosts] = useState<SoriPost[]>([]);
+
+  useEffect(() => {
+    function refreshPosts() {
+      setPosts(readPosts());
+    }
+
+    refreshPosts();
+
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      window.addEventListener(POSTS_CHANGED_EVENT, refreshPosts);
+      window.addEventListener('storage', refreshPosts);
+      return () => {
+        window.removeEventListener(POSTS_CHANGED_EVENT, refreshPosts);
+        window.removeEventListener('storage', refreshPosts);
+      };
+    }
+
+    return undefined;
+  }, []);
+
   return (
     <ScrollView style={styles.page} contentContainerStyle={styles.content}>
       <View style={styles.feedColumn}>
@@ -20,8 +74,12 @@ export default function FeedScreen() {
         <View style={styles.composerPrompt}>
           <CurrentIdentityBadge size="md" />
           <View style={styles.promptCopy}>
-            <Text style={styles.promptTitle}>No posts yet.</Text>
-            <Text style={styles.promptText}>Create the first Sori post or follow profiles as they join.</Text>
+            <Text style={styles.promptTitle}>{posts.length ? 'Create another post.' : 'No posts yet.'}</Text>
+            <Text style={styles.promptText}>
+              {posts.length
+                ? 'Share a thought, photo, video, or profile update with the Sori feed.'
+                : 'Create the first Sori post or follow profiles as they join.'}
+            </Text>
           </View>
           <Link href="/create-post" asChild>
             <Pressable style={styles.promptButton}>
@@ -30,23 +88,61 @@ export default function FeedScreen() {
           </Link>
         </View>
 
-        <View style={styles.emptyFeed}>
-          <View style={styles.emptyVisualizer}>
-            <View style={styles.feedCardGhost} />
-            <View style={styles.feedCardGhostSmall} />
+        {posts.length ? (
+          <View style={styles.postList}>
+            {posts.map((post) => (
+              <View key={post.id} style={styles.postCard}>
+                <View style={styles.postHeader}>
+                  <IdentityBadge identity={post.author} size="md" />
+                  <View style={styles.postMeta}>
+                    <Text style={styles.visibilityPill}>{visibilityLabels[post.visibility]}</Text>
+                    <Text style={styles.postTime}>{formatPostTime(post.createdAt)}</Text>
+                  </View>
+                </View>
+
+                {post.body ? <Text style={styles.postBody}>{post.body}</Text> : null}
+
+                {post.media.length ? (
+                  <View style={[styles.feedMediaGrid, post.media.length === 1 && styles.feedMediaGridSingle]}>
+                    {post.media.map((item) => (
+                      <View key={item.id} style={styles.feedMediaCard}>
+                        {item.type === 'image' ? (
+                          <Image source={{ uri: item.uri }} style={styles.feedImage} resizeMode="cover" />
+                        ) : (
+                          <WebFeedVideo uri={item.uri} />
+                        )}
+                      </View>
+                    ))}
+                  </View>
+                ) : null}
+
+                <View style={styles.postActions}>
+                  <Text style={styles.actionText}>Like</Text>
+                  <Text style={styles.actionText}>Comment</Text>
+                  <Text style={styles.actionText}>Share</Text>
+                </View>
+              </View>
+            ))}
           </View>
-          <Text style={styles.emptyTitle}>The feed is quiet for now.</Text>
-          <Text style={styles.emptyText}>
-            Once people start posting, this page becomes the living front door of Sori: updates,
-            media, reels, and profile launches in one stream.
-          </Text>
-        </View>
+        ) : (
+          <View style={styles.emptyFeed}>
+            <View style={styles.emptyVisualizer}>
+              <View style={styles.feedCardGhost} />
+              <View style={styles.feedCardGhostSmall} />
+            </View>
+            <Text style={styles.emptyTitle}>The feed is quiet for now.</Text>
+            <Text style={styles.emptyText}>
+              Once people start posting, this page becomes the living front door of Sori: updates,
+              media, reels, and profile launches in one stream.
+            </Text>
+          </View>
+        )}
       </View>
 
       <View style={styles.rightRail}>
         <Text style={styles.panelTitle}>Today on Sori</Text>
         <View style={styles.metric}>
-          <Text style={styles.metricValue}>0</Text>
+          <Text style={styles.metricValue}>{posts.length}</Text>
           <Text style={styles.metricLabel}>new posts</Text>
         </View>
         <View style={styles.metric}>
@@ -145,6 +241,86 @@ const styles = StyleSheet.create({
   promptButtonText: {
     color: '#ffffff',
     fontSize: 14,
+    fontWeight: '900',
+  },
+  postList: {
+    gap: 16,
+  },
+  postCard: {
+    borderRadius: 26,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: '#0f172a',
+    padding: 18,
+  },
+  postHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 14,
+  },
+  postMeta: {
+    alignItems: 'flex-end',
+    gap: 5,
+  },
+  visibilityPill: {
+    color: '#e0f2fe',
+    fontSize: 11,
+    fontWeight: '900',
+    borderRadius: 999,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(103,232,249,0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(103,232,249,0.26)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  postTime: {
+    color: '#94a3b8',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  postBody: {
+    color: '#f8fafc',
+    fontSize: 18,
+    lineHeight: 28,
+    marginTop: 16,
+  },
+  feedMediaGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginTop: 16,
+  },
+  feedMediaGridSingle: {
+    flexDirection: 'column',
+  },
+  feedMediaCard: {
+    flexGrow: 1,
+    flexBasis: 260,
+    minHeight: 230,
+    borderRadius: 20,
+    overflow: 'hidden',
+    backgroundColor: '#050509',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+  feedImage: {
+    width: '100%',
+    height: 330,
+    backgroundColor: '#050509',
+  },
+  postActions: {
+    flexDirection: 'row',
+    gap: 10,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.08)',
+    paddingTop: 14,
+    marginTop: 16,
+  },
+  actionText: {
+    color: '#94a3b8',
+    fontSize: 13,
     fontWeight: '900',
   },
   emptyFeed: {
