@@ -80,7 +80,6 @@ const responsiveFrameStyle = `
     border-radius: 999px;
     overflow: hidden;
     background: #2a111d;
-    border: 1px solid rgba(255,214,232,.9);
     box-shadow: 0 0 16px rgba(255,122,182,.45);
     vertical-align: -3px;
   }
