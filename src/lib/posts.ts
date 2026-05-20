@@ -58,6 +58,34 @@ export function savePost(post: SoriPost) {
   window.dispatchEvent(new CustomEvent(POSTS_CHANGED_EVENT));
 }
 
+export function updatePost(postId: string, updates: Partial<Pick<SoriPost, 'body' | 'visibility'>>) {
+  if (!canUseLocalPosts()) {
+    return;
+  }
+
+  const nextPosts = readPosts().map((post) =>
+    post.id === postId
+      ? {
+          ...post,
+          ...updates,
+        }
+      : post,
+  );
+
+  window.localStorage.setItem(POSTS_STORAGE_KEY, JSON.stringify(nextPosts));
+  window.dispatchEvent(new CustomEvent(POSTS_CHANGED_EVENT));
+}
+
+export function deletePost(postId: string) {
+  if (!canUseLocalPosts()) {
+    return;
+  }
+
+  const nextPosts = readPosts().filter((post) => post.id !== postId);
+  window.localStorage.setItem(POSTS_STORAGE_KEY, JSON.stringify(nextPosts));
+  window.dispatchEvent(new CustomEvent(POSTS_CHANGED_EVENT));
+}
+
 export function makePostId() {
   const random = Math.random().toString(36).slice(2, 9);
   return `post_${Date.now()}_${random}`;

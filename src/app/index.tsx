@@ -1,9 +1,19 @@
 import { Link } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { CurrentIdentityBadge, IdentityBadge } from '@/components/identity-badge';
-import { POSTS_CHANGED_EVENT, readPosts, type SoriPost, visibilityLabels } from '@/lib/posts';
+import {
+  deletePost,
+  POSTS_CHANGED_EVENT,
+  readPosts,
+  type PostVisibility,
+  type SoriPost,
+  updatePost,
+  visibilityLabels,
+} from '@/lib/posts';
+
+const visibilityOptions: PostVisibility[] = ['public', 'friends', 'private'];
 
 function WebFeedVideo({ uri }: { uri: string }) {
   if (Platform.OS !== 'web') {
@@ -39,6 +49,10 @@ function formatPostTime(value: string) {
 
 export default function FeedScreen() {
   const [posts, setPosts] = useState<SoriPost[]>([]);
+  const [openMenuPostId, setOpenMenuPostId] = useState<string | null>(null);
+  const [editingPostId, setEditingPostId] = useState<string | null>(null);
+  const [editBody, setEditBody] = useState('');
+  const [editVisibility, setEditVisibility] = useState<PostVisibility>('public');
 
   useEffect(() => {
     function refreshPosts() {
@@ -58,6 +72,40 @@ export default function FeedScreen() {
 
     return undefined;
   }, []);
+
+  function beginEditing(post: SoriPost) {
+    setEditingPostId(post.id);
+    setEditBody(post.body);
+    setEditVisibility(post.visibility);
+    setOpenMenuPostId(null);
+  }
+
+  function cancelEditing() {
+    setEditingPostId(null);
+    setEditBody('');
+    setEditVisibility('public');
+  }
+
+  function savePostEdits(postId: string) {
+    updatePost(postId, {
+      body: editBody.trim(),
+      visibility: editVisibility,
+    });
+    cancelEditing();
+  }
+
+  function removePost(postId: string) {
+    deletePost(postId);
+    if (editingPostId === postId) {
+      cancelEditing();
+    }
+    setOpenMenuPostId(null);
+  }
+
+  function changePostVisibility(postId: string, visibility: PostVisibility) {
+    updatePost(postId, { visibility });
+    setOpenMenuPostId(null);
+  }
 
   return (
     <ScrollView style={styles.page} contentContainerStyle={styles.content}>
@@ -91,16 +139,85 @@ export default function FeedScreen() {
         {posts.length ? (
           <View style={styles.postList}>
             {posts.map((post) => (
-              <View key={post.id} style={styles.postCard}>
+              <View key={post.id} style={[styles.postCard, openMenuPostId === post.id && styles.postCardMenuOpen]}>
                 <View style={styles.postHeader}>
                   <IdentityBadge identity={post.author} size="md" />
-                  <View style={styles.postMeta}>
-                    <Text style={styles.visibilityPill}>{visibilityLabels[post.visibility]}</Text>
-                    <Text style={styles.postTime}>{formatPostTime(post.createdAt)}</Text>
+                  <View style={styles.postControls}>
+                    <View style={styles.postMeta}>
+                      <Text style={styles.visibilityPill}>{visibilityLabels[post.visibility]}</Text>
+                      <Text style={styles.postTime}>{formatPostTime(post.createdAt)}</Text>
+                    </View>
+                    <Pressable
+                      accessibilityLabel="Post options"
+                      style={({ pressed }) => [styles.optionsButton, pressed && styles.pressed]}
+                      onPress={() => setOpenMenuPostId((current) => (current === post.id ? null : post.id))}>
+                      <Text style={styles.optionsText}>...</Text>
+                    </Pressable>
+                    {openMenuPostId === post.id ? (
+                      <View style={styles.optionsMenu}>
+                        <Pressable style={styles.menuItem} onPress={() => beginEditing(post)}>
+                          <Text style={styles.menuItemText}>Edit post</Text>
+                        </Pressable>
+                        <Text style={styles.menuLabel}>Change visibility</Text>
+                        {visibilityOptions.map((option) => (
+                          <Pressable
+                            key={option}
+                            style={[styles.menuItem, post.visibility === option && styles.menuItemActive]}
+                            onPress={() => changePostVisibility(post.id, option)}>
+                            <Text style={[styles.menuItemText, post.visibility === option && styles.menuItemTextActive]}>
+                              {visibilityLabels[option]}
+                            </Text>
+                          </Pressable>
+                        ))}
+                        <Pressable style={[styles.menuItem, styles.deleteMenuItem]} onPress={() => removePost(post.id)}>
+                          <Text style={styles.deleteMenuText}>Delete post</Text>
+                        </Pressable>
+                      </View>
+                    ) : null}
                   </View>
                 </View>
 
-                {post.body ? <Text style={styles.postBody}>{post.body}</Text> : null}
+                {editingPostId === post.id ? (
+                  <View style={styles.editPanel}>
+                    <TextInput
+                      style={styles.editInput}
+                      placeholder="Edit your post..."
+                      placeholderTextColor="#64748b"
+                      multiline
+                      value={editBody}
+                      onChangeText={setEditBody}
+                    />
+                    <View style={styles.editVisibilityRow}>
+                      {visibilityOptions.map((option) => (
+                        <Pressable
+                          key={option}
+                          style={[
+                            styles.editVisibilityButton,
+                            editVisibility === option && styles.editVisibilityButtonActive,
+                          ]}
+                          onPress={() => setEditVisibility(option)}>
+                          <Text
+                            style={[
+                              styles.editVisibilityText,
+                              editVisibility === option && styles.editVisibilityTextActive,
+                            ]}>
+                            {visibilityLabels[option]}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                    <View style={styles.editActions}>
+                      <Pressable style={styles.cancelButton} onPress={cancelEditing}>
+                        <Text style={styles.cancelButtonText}>Cancel</Text>
+                      </Pressable>
+                      <Pressable style={styles.saveButton} onPress={() => savePostEdits(post.id)}>
+                        <Text style={styles.saveButtonText}>Save changes</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                ) : post.body ? (
+                  <Text style={styles.postBody}>{post.body}</Text>
+                ) : null}
 
                 {post.media.length ? (
                   <View style={[styles.feedMediaGrid, post.media.length === 1 && styles.feedMediaGridSingle]}>
@@ -252,12 +369,23 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.12)',
     backgroundColor: '#0f172a',
     padding: 18,
+    zIndex: 1,
+  },
+  postCardMenuOpen: {
+    zIndex: 50,
   },
   postHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 14,
+    zIndex: 5,
+  },
+  postControls: {
+    position: 'relative',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
   },
   postMeta: {
     alignItems: 'flex-end',
@@ -280,11 +408,158 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '800',
   },
+  optionsButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  optionsText: {
+    color: '#ffffff',
+    fontSize: 18,
+    lineHeight: 18,
+    fontWeight: '900',
+    marginTop: -7,
+  },
+  optionsMenu: {
+    position: 'absolute',
+    top: 42,
+    right: 0,
+    width: 210,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.14)',
+    backgroundColor: '#070b16',
+    padding: 8,
+    gap: 5,
+    zIndex: 100,
+    elevation: 20,
+    shadowColor: '#ff3cbf',
+    shadowOpacity: 0.24,
+    shadowRadius: 24,
+  },
+  menuItem: {
+    minHeight: 38,
+    borderRadius: 12,
+    justifyContent: 'center',
+    paddingHorizontal: 11,
+  },
+  menuItemActive: {
+    backgroundColor: 'rgba(103,232,249,0.14)',
+  },
+  menuItemText: {
+    color: '#dbeafe',
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  menuItemTextActive: {
+    color: '#ffffff',
+  },
+  menuLabel: {
+    color: '#64748b',
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    paddingHorizontal: 11,
+    paddingTop: 6,
+  },
+  deleteMenuItem: {
+    backgroundColor: 'rgba(248,113,113,0.1)',
+  },
+  deleteMenuText: {
+    color: '#fca5a5',
+    fontSize: 12,
+    fontWeight: '900',
+  },
   postBody: {
     color: '#f8fafc',
     fontSize: 18,
     lineHeight: 28,
     marginTop: 16,
+  },
+  editPanel: {
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(103,232,249,0.18)',
+    backgroundColor: 'rgba(5,5,9,0.35)',
+    padding: 12,
+    marginTop: 16,
+    gap: 12,
+  },
+  editInput: {
+    minHeight: 120,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#263244',
+    backgroundColor: '#111827',
+    color: '#ffffff',
+    padding: 14,
+    fontSize: 16,
+    textAlignVertical: 'top',
+  },
+  editVisibilityRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  editVisibilityButton: {
+    minHeight: 36,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: 'rgba(255,255,255,0.055)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 13,
+  },
+  editVisibilityButtonActive: {
+    borderColor: '#67e8f9',
+    backgroundColor: 'rgba(103,232,249,0.18)',
+  },
+  editVisibilityText: {
+    color: '#94a3b8',
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  editVisibilityTextActive: {
+    color: '#ffffff',
+  },
+  editActions: {
+    flexDirection: 'row',
+    gap: 10,
+    justifyContent: 'flex-end',
+  },
+  cancelButton: {
+    minHeight: 42,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+  },
+  cancelButtonText: {
+    color: '#cbd5e1',
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  saveButton: {
+    minHeight: 42,
+    borderRadius: 14,
+    backgroundColor: '#ff3cbf',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+  },
+  saveButtonText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '900',
   },
   feedMediaGrid: {
     flexDirection: 'row',
@@ -322,6 +597,10 @@ const styles = StyleSheet.create({
     color: '#94a3b8',
     fontSize: 13,
     fontWeight: '900',
+  },
+  pressed: {
+    opacity: 0.78,
+    transform: [{ scale: 0.97 }],
   },
   emptyFeed: {
     alignItems: 'center',
