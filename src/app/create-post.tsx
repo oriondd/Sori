@@ -22,15 +22,6 @@ function getMediaType(file: File): PostMediaType | null {
   return null;
 }
 
-function readFileAsDataUrl(file: File) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ''));
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
-}
-
 function WebVideoPreview({ uri }: { uri: string }) {
   if (Platform.OS !== 'web') {
     return null;
@@ -58,9 +49,10 @@ export default function CreatePostScreen() {
   const [media, setMedia] = useState<SoriPostMedia[]>([]);
   const [identity, setIdentity] = useState<SoriIdentity | null>(null);
   const [statusMessage, setStatusMessage] = useState('');
+  const [isPublishing, setIsPublishing] = useState(false);
   const { width } = useWindowDimensions();
   const compact = width < 900;
-  const canPost = postText.trim().length > 0 || media.length > 0;
+  const canPost = !isPublishing && (postText.trim().length > 0 || media.length > 0);
 
   useEffect(() => {
     async function loadIdentity() {
@@ -71,7 +63,7 @@ export default function CreatePostScreen() {
     loadIdentity();
   }, []);
 
-  async function pickMedia(kind: 'image' | 'video' | 'all') {
+  async function pickMedia(kind: 'image' | 'video') {
     if (Platform.OS !== 'web' || typeof document === 'undefined') {
       setStatusMessage('Media picker is wired for web first. Native Expo media picker comes next.');
       return;
@@ -80,7 +72,7 @@ export default function CreatePostScreen() {
     const input = document.createElement('input');
     input.type = 'file';
     input.multiple = true;
-    input.accept = kind === 'image' ? 'image/*' : kind === 'video' ? 'video/*' : 'image/*,video/*';
+    input.accept = kind === 'image' ? 'image/*' : 'video/*';
 
     input.onchange = async () => {
       const files = Array.from(input.files || []);
@@ -103,7 +95,8 @@ export default function CreatePostScreen() {
             id: makeMediaId(),
             type,
             name: file.name,
-            uri: await readFileAsDataUrl(file),
+            uri: URL.createObjectURL(file),
+            blob: file,
           };
         }),
       );
@@ -116,10 +109,17 @@ export default function CreatePostScreen() {
   }
 
   function removeMedia(mediaId: string) {
-    setMedia((current) => current.filter((item) => item.id !== mediaId));
+    setMedia((current) => {
+      const itemToRemove = current.find((item) => item.id === mediaId);
+      if (itemToRemove?.uri.startsWith('blob:')) {
+        URL.revokeObjectURL(itemToRemove.uri);
+      }
+
+      return current.filter((item) => item.id !== mediaId);
+    });
   }
 
-  function publishPost() {
+  async function publishPost() {
     if (!canPost) {
       setStatusMessage('Write something or attach a photo/video before posting.');
       return;
@@ -134,21 +134,35 @@ export default function CreatePostScreen() {
         verifiedBadge: null,
       } satisfies SoriIdentity);
 
-    savePost({
-      id: makePostId(),
-      body: postText.trim(),
-      visibility,
-      media,
-      author,
-      createdAt: new Date().toISOString(),
-    });
+    setIsPublishing(true);
+    setStatusMessage('Posting to Sori...');
 
-    setPostText('');
-    setMedia([]);
-    setVisibility('public');
-    setVisibilityMenuOpen(false);
-    setStatusMessage('Posted to the Sori feed.');
-    router.replace('/');
+    try {
+      await savePost({
+        id: makePostId(),
+        body: postText.trim(),
+        visibility,
+        media,
+        author,
+        createdAt: new Date().toISOString(),
+      });
+
+      media.forEach((item) => {
+        if (item.uri.startsWith('blob:')) {
+          URL.revokeObjectURL(item.uri);
+        }
+      });
+
+      setPostText('');
+      setMedia([]);
+      setVisibility('public');
+      setVisibilityMenuOpen(false);
+      setStatusMessage('Posted to the Sori feed.');
+      router.replace('/');
+    } catch {
+      setStatusMessage('Something went wrong posting that media. Try a smaller file.');
+      setIsPublishing(false);
+    }
   }
 
   return (
@@ -214,9 +228,6 @@ export default function CreatePostScreen() {
           <Pressable style={({ pressed }) => [styles.mediaBox, pressed && styles.pressed]} onPress={() => pickMedia('video')}>
             <Text style={styles.mediaText}>Add Video</Text>
           </Pressable>
-          <Pressable style={({ pressed }) => [styles.mediaBox, pressed && styles.pressed]} onPress={() => pickMedia('all')}>
-            <Text style={styles.mediaText}>Upload Media</Text>
-          </Pressable>
         </View>
 
         {media.length ? (
@@ -244,7 +255,7 @@ export default function CreatePostScreen() {
         <Pressable
           style={({ pressed }) => [styles.postButton, !canPost && styles.postButtonDisabled, pressed && canPost && styles.pressed]}
           onPress={publishPost}>
-          <Text style={styles.postButtonText}>Post to Sori</Text>
+          <Text style={styles.postButtonText}>{isPublishing ? 'Posting...' : 'Post to Sori'}</Text>
         </Pressable>
 
       </View>

@@ -10,6 +10,7 @@ export type SoriPostMedia = {
   type: PostMediaType;
   name: string;
   uri: string;
+  blob?: Blob;
 };
 
 export type SoriPost = {
@@ -23,6 +24,10 @@ export type SoriPost = {
 
 export const POSTS_STORAGE_KEY = 'sori.feed.posts.v1';
 export const POSTS_CHANGED_EVENT = 'sori-posts-changed';
+
+const MEDIA_DB_NAME = 'sori-feed-media';
+const MEDIA_STORE_NAME = 'media';
+const MEDIA_URI_PREFIX = 'indexeddb:';
 
 export const visibilityLabels: Record<PostVisibility, string> = {
   public: 'Public',
@@ -48,12 +53,132 @@ export function readPosts() {
   }
 }
 
-export function savePost(post: SoriPost) {
+function openMediaDb() {
+  return new Promise<IDBDatabase>((resolve, reject) => {
+    if (!canUseLocalPosts() || !('indexedDB' in window)) {
+      reject(new Error('IndexedDB is not available.'));
+      return;
+    }
+
+    const request = window.indexedDB.open(MEDIA_DB_NAME, 1);
+
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(MEDIA_STORE_NAME)) {
+        db.createObjectStore(MEDIA_STORE_NAME);
+      }
+    };
+
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+function withMediaStore<T>(mode: IDBTransactionMode, action: (store: IDBObjectStore) => IDBRequest<T>) {
+  return openMediaDb().then(
+    (db) =>
+      new Promise<T>((resolve, reject) => {
+        const transaction = db.transaction(MEDIA_STORE_NAME, mode);
+        const store = transaction.objectStore(MEDIA_STORE_NAME);
+        const request = action(store);
+
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+        transaction.oncomplete = () => db.close();
+        transaction.onerror = () => {
+          db.close();
+          reject(transaction.error);
+        };
+      }),
+  );
+}
+
+async function saveMediaBlob(media: SoriPostMedia) {
+  if (!media.blob) {
+    return media;
+  }
+
+  await withMediaStore('readwrite', (store) =>
+    store.put(
+      {
+        blob: media.blob,
+        type: media.type,
+        name: media.name,
+      },
+      media.id,
+    ),
+  );
+
+  return {
+    id: media.id,
+    type: media.type,
+    name: media.name,
+    uri: `${MEDIA_URI_PREFIX}${media.id}`,
+  };
+}
+
+async function deleteMediaBlob(mediaId: string) {
+  try {
+    await withMediaStore('readwrite', (store) => store.delete(mediaId));
+  } catch {
+    // Media cleanup is best-effort in the local prototype.
+  }
+}
+
+async function resolveMediaUri(media: SoriPostMedia) {
+  if (!media.uri.startsWith(MEDIA_URI_PREFIX)) {
+    return media;
+  }
+
+  try {
+    const mediaRecord = await withMediaStore<{
+      blob?: Blob;
+      type?: PostMediaType;
+      name?: string;
+    }>('readonly', (store) => store.get(media.id));
+
+    if (!mediaRecord?.blob) {
+      return media;
+    }
+
+    return {
+      ...media,
+      uri: URL.createObjectURL(mediaRecord.blob),
+      type: mediaRecord.type || media.type,
+      name: mediaRecord.name || media.name,
+    };
+  } catch {
+    return media;
+  }
+}
+
+async function preparePostForStorage(post: SoriPost) {
+  const media = await Promise.all(post.media.map(saveMediaBlob));
+
+  return {
+    ...post,
+    media,
+  };
+}
+
+export async function resolvePostMedia(posts: SoriPost[]) {
+  const resolvedPosts = await Promise.all(
+    posts.map(async (post) => ({
+      ...post,
+      media: await Promise.all(post.media.map(resolveMediaUri)),
+    })),
+  );
+
+  return resolvedPosts;
+}
+
+export async function savePost(post: SoriPost) {
   if (!canUseLocalPosts()) {
     return;
   }
 
-  const nextPosts = [post, ...readPosts()].slice(0, 100);
+  const postForStorage = await preparePostForStorage(post);
+  const nextPosts = [postForStorage, ...readPosts()].slice(0, 100);
   window.localStorage.setItem(POSTS_STORAGE_KEY, JSON.stringify(nextPosts));
   window.dispatchEvent(new CustomEvent(POSTS_CHANGED_EVENT));
 }
@@ -81,7 +206,16 @@ export function deletePost(postId: string) {
     return;
   }
 
-  const nextPosts = readPosts().filter((post) => post.id !== postId);
+  const posts = readPosts();
+  const postToDelete = posts.find((post) => post.id === postId);
+  const nextPosts = posts.filter((post) => post.id !== postId);
+
+  postToDelete?.media.forEach((media) => {
+    if (media.uri.startsWith(MEDIA_URI_PREFIX)) {
+      deleteMediaBlob(media.id);
+    }
+  });
+
   window.localStorage.setItem(POSTS_STORAGE_KEY, JSON.stringify(nextPosts));
   window.dispatchEvent(new CustomEvent(POSTS_CHANGED_EVENT));
 }

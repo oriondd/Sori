@@ -7,6 +7,7 @@ import {
   deletePost,
   POSTS_CHANGED_EVENT,
   readPosts,
+  resolvePostMedia,
   type PostVisibility,
   type SoriPost,
   updatePost,
@@ -55,8 +56,13 @@ export default function FeedScreen() {
   const [editVisibility, setEditVisibility] = useState<PostVisibility>('public');
 
   useEffect(() => {
-    function refreshPosts() {
-      setPosts(readPosts());
+    let mounted = true;
+
+    async function refreshPosts() {
+      const postsWithMedia = await resolvePostMedia(readPosts());
+      if (mounted) {
+        setPosts(postsWithMedia);
+      }
     }
 
     refreshPosts();
@@ -65,12 +71,15 @@ export default function FeedScreen() {
       window.addEventListener(POSTS_CHANGED_EVENT, refreshPosts);
       window.addEventListener('storage', refreshPosts);
       return () => {
+        mounted = false;
         window.removeEventListener(POSTS_CHANGED_EVENT, refreshPosts);
         window.removeEventListener('storage', refreshPosts);
       };
     }
 
-    return undefined;
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   function beginEditing(post: SoriPost) {
