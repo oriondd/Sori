@@ -3,11 +3,11 @@ import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 const navItems = [
-  { href: '/', label: 'Feed', featured: false },
-  { href: '/my-profile', label: 'My Profile', featured: false },
-  { href: '/create-post', label: 'Create Post', featured: true },
-  { href: '/market', label: 'Designer Market', featured: false },
-  { href: '/dashboard', label: 'Profile Studio', featured: false },
+  { href: '/', label: 'Feed', icon: 'F', accent: '#67e8f9', bg: 'rgba(103,232,249,0.1)', activeBg: 'rgba(103,232,249,0.22)', featured: false },
+  { href: '/my-profile', label: 'My Profile', icon: 'P', accent: '#ff3cbf', bg: 'rgba(255,60,191,0.1)', activeBg: 'rgba(255,60,191,0.22)', featured: false },
+  { href: '/create-post', label: 'Create Post', icon: '+', accent: '#facc15', bg: 'rgba(250,204,21,0.13)', activeBg: 'rgba(250,204,21,0.26)', featured: true },
+  { href: '/market', label: 'Designer Market', icon: 'M', accent: '#a78bfa', bg: 'rgba(167,139,250,0.11)', activeBg: 'rgba(167,139,250,0.24)', featured: false },
+  { href: '/dashboard', label: 'Profile Studio', icon: 'S', accent: '#34d399', bg: 'rgba(52,211,153,0.1)', activeBg: 'rgba(52,211,153,0.22)', featured: false },
 ] as const;
 
 export default function AppTabs() {
@@ -21,7 +21,7 @@ export default function AppTabs() {
 
       <View style={styles.sidebar}>
         <Link href="/" asChild>
-          <Pressable style={({ pressed }) => [styles.brandButton, pressed && styles.pressed]}>
+          <Pressable style={({ pressed }) => [styles.brandButton, pressed && styles.pressedButton]}>
             <Text style={styles.brandText}>SORI</Text>
           </Pressable>
         </Link>
@@ -32,14 +32,28 @@ export default function AppTabs() {
             return (
               <Link key={item.href} href={item.href} asChild>
                 <Pressable
-                  style={({ pressed }) => [
-                    item.featured ? styles.createButton : styles.railButton,
-                    active && (item.featured ? styles.createButtonActive : styles.railButtonActive),
-                    pressed && styles.pressed,
-                  ]}>
-                  <Text style={item.featured ? styles.createButtonText : [styles.railButtonText, active && styles.railButtonTextActive]}>
-                    {item.label}
-                  </Text>
+                  style={({ pressed }) =>
+                    StyleSheet.flatten([
+                      styles.railButton,
+                      item.featured && styles.createButton,
+                      {
+                        borderColor: active ? item.accent : `${item.accent}40`,
+                        backgroundColor: active ? item.activeBg : item.bg,
+                        shadowColor: item.accent,
+                      },
+                      active && styles.railButtonActive,
+                      pressed && styles.pressedButton,
+                    ])
+                  }>
+                  <View style={styles.navButtonContent}>
+                    <View style={[styles.iconBadge, { backgroundColor: item.accent }]}>
+                      <Text style={styles.iconText}>{item.icon}</Text>
+                    </View>
+                    <Text style={[styles.railButtonText, active && styles.railButtonTextActive]}>
+                      {item.label}
+                    </Text>
+                  </View>
+                  {active ? <View style={[styles.activeGlow, { backgroundColor: item.accent }]} /> : null}
                 </Pressable>
               </Link>
             );
@@ -87,6 +101,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,60,191,0.13)',
     borderWidth: 1,
     borderColor: 'rgba(255,60,191,0.36)',
+    shadowColor: '#ff3cbf',
+    shadowOpacity: 0.22,
+    shadowRadius: 16,
   },
   brandText: {
     color: '#ffffff',
@@ -96,52 +113,65 @@ const styles = StyleSheet.create({
     letterSpacing: 3,
   },
   navGroup: {
-    gap: 10,
+    gap: 9,
     width: '100%',
   },
   railButton: {
-    minHeight: 48,
+    minHeight: 52,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-    backgroundColor: 'rgba(255,255,255,0.04)',
+    overflow: 'hidden',
     justifyContent: 'center',
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 7,
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
   },
   railButtonActive: {
-    backgroundColor: 'rgba(255,60,191,0.17)',
-    borderColor: '#ff3cbf',
+    shadowOpacity: 0.28,
+    shadowRadius: 18,
+  },
+  navButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  iconBadge: {
+    width: 27,
+    height: 27,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconText: {
+    color: '#050509',
+    fontSize: 13,
+    fontWeight: '900',
   },
   railButtonText: {
     color: '#cbd5e1',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '900',
+    lineHeight: 14,
+    width: 72,
   },
   railButtonTextActive: {
     color: '#ffffff',
   },
   createButton: {
     minHeight: 56,
-    borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    backgroundColor: '#ff3cbf',
-    borderWidth: 1,
-    borderColor: '#f0abfc',
-    shadowColor: '#ff3cbf',
-    shadowOpacity: 0.36,
-    shadowRadius: 18,
   },
-  createButtonActive: {
-    borderColor: '#ffffff',
+  activeGlow: {
+    position: 'absolute',
+    right: 0,
+    top: 10,
+    bottom: 10,
+    width: 3,
+    borderTopLeftRadius: 999,
+    borderBottomLeftRadius: 999,
   },
-  createButtonText: {
-    color: '#ffffff',
-    fontSize: 13,
-    fontWeight: '900',
-  },
-  pressed: {
-    opacity: 0.72,
+  pressedButton: {
+    opacity: 0.82,
+    transform: [{ scale: 0.96 }, { translateY: 1 }],
   },
 });
